@@ -1,0 +1,13 @@
+package com.copyleft.GodsChoice;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class GodsChoiceApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}
