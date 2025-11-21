@@ -29,10 +29,7 @@ public class NicknameService {
         }
 
         String oldNickname = nicknameRepository.getNicknameBySessionId(sessionId);
-        if (oldNickname != null && !oldNickname.equals(nickname)) {
-            nicknameRepository.removeNickname(oldNickname);
-            log.info("기존 닉네임 정리: session={}, old={}", sessionId, oldNickname);
-        } else if (oldNickname != null && oldNickname.equals(nickname)) {
+        if (oldNickname != null && oldNickname.equals(nickname)) {
             sendSuccess(sessionId, nickname);
             return;
         }
@@ -42,6 +39,11 @@ public class NicknameService {
         if (!isReserved) {
             sendDuplicate(sessionId);
             return;
+        }
+
+        if (oldNickname != null && !oldNickname.equals(nickname)) {
+            nicknameRepository.removeNickname(oldNickname);
+            log.info("기존 닉네임 정리: session={}, old={}", sessionId, oldNickname);
         }
 
         nicknameRepository.saveSessionNicknameMapping(sessionId, nickname);

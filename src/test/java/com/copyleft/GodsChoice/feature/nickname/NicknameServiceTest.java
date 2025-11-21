@@ -6,10 +6,12 @@ import com.copyleft.GodsChoice.infra.websocket.WebSocketSender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -71,7 +73,10 @@ class NicknameServiceTest {
         nicknameService.setNickname(sessionId, shortName);
 
         // then
-        verify(nicknameRepository, never()).isNicknameExists(anyString()); // 중복 검사도 안 해야 함
+        verify(nicknameRepository, never()).reserveNickname(anyString()); // 중복 검사도 안 해야 함
         verify(webSocketSender).sendEventToSession(eq(sessionId), any(NicknameResponse.class));
+        ArgumentCaptor<NicknameResponse> captor = ArgumentCaptor.forClass(NicknameResponse.class);
+        verify(webSocketSender).sendEventToSession(eq(sessionId), captor.capture());
+        assertEquals("ERROR_MESSAGE", captor.getValue().getEvent());
     }
 }

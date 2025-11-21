@@ -13,11 +13,6 @@ public class NicknameRepository {
     private static final String KEY_ACTIVE_NICKNAMES = "active_nicknames";
     private static final String KEY_SESSION_PREFIX = "session:";
 
-    public boolean isNicknameExists(String nickname) {
-        Boolean result = redisTemplate.opsForSet().isMember(KEY_ACTIVE_NICKNAMES, nickname);
-        return result != null && result;
-    }
-
     public boolean reserveNickname(String nickname) {
         Long addedCount = redisTemplate.opsForSet().add(KEY_ACTIVE_NICKNAMES, nickname);
         return addedCount != null && addedCount > 0;
