@@ -42,7 +42,12 @@ class NicknameServiceTest {
         // then
         verify(nicknameRepository).reserveNickname(nickname);
         verify(nicknameRepository).saveSessionNicknameMapping(sessionId, nickname);
-        verify(webSocketSender).sendEventToSession(eq(sessionId), any(NicknameResponse.class));
+        ArgumentCaptor<NicknameResponse> captor = ArgumentCaptor.forClass(NicknameResponse.class);
+        verify(webSocketSender).sendEventToSession(eq(sessionId), captor.capture());
+
+        NicknameResponse response = captor.getValue();
+        assertEquals("NICKNAME_SUCCESS", response.getEvent());
+        assertEquals(nickname, response.getPlayer().getNickname());
     }
 
     @Test
@@ -60,6 +65,10 @@ class NicknameServiceTest {
         verify(nicknameRepository).reserveNickname(nickname);
         // 중복이면 저장은 호출되면 안 됨
         verify(nicknameRepository, never()).saveSessionNicknameMapping(anyString(), anyString());
+
+        ArgumentCaptor<NicknameResponse> captor = ArgumentCaptor.forClass(NicknameResponse.class);
+        verify(webSocketSender).sendEventToSession(eq(sessionId), captor.capture());
+        assertEquals("NICKNAME_DUPLICATE", captor.getValue().getEvent());
     }
 
     @Test
@@ -74,7 +83,6 @@ class NicknameServiceTest {
 
         // then
         verify(nicknameRepository, never()).reserveNickname(anyString()); // 중복 검사도 안 해야 함
-        verify(webSocketSender).sendEventToSession(eq(sessionId), any(NicknameResponse.class));
         ArgumentCaptor<NicknameResponse> captor = ArgumentCaptor.forClass(NicknameResponse.class);
         verify(webSocketSender).sendEventToSession(eq(sessionId), captor.capture());
         assertEquals("ERROR_MESSAGE", captor.getValue().getEvent());
