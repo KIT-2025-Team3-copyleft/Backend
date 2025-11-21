@@ -26,6 +26,8 @@ public class Room {
     private String roomCode;      // 유저 공유용 코드
     private String hostSessionId; // 방장의 sessionId
 
+    public static final int MAX_PLAYER_COUNT = 4;
+
     @Builder.Default
     private List<Player> players = new ArrayList<>();
 

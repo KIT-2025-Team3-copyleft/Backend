@@ -74,7 +74,8 @@ public class LobbyService {
 
     private void joinRoomInternal(String sessionId, String roomId) {
 
-        if (!redisLockRepository.lock(roomId)) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) {
             responseSender.sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
             return;
         }
@@ -83,17 +84,19 @@ public class LobbyService {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
             if (roomOpt.isEmpty()) {
                 responseSender.sendError(sessionId, ErrorCode.ROOM_NOT_FOUND);
+                roomRepository.removeWaitingRoom(roomId);
                 return;
             }
             Room room = roomOpt.get();
 
-            if (room.getPlayers().size() >= 4) {
+            if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
                 responseSender.sendError(sessionId, ErrorCode.ROOM_FULL);
                 roomRepository.removeWaitingRoom(roomId);
                 return;
             }
             if (room.getStatus() != RoomStatus.WAITING) {
                 responseSender.sendError(sessionId, ErrorCode.ROOM_ALREADY_PLAYING);
+                roomRepository.removeWaitingRoom(roomId);
                 return;
             }
 
@@ -108,7 +111,7 @@ public class LobbyService {
             room.addPlayer(newPlayer);
             roomRepository.saveRoom(room);
 
-            if (room.getPlayers().size() >= 4) {
+            if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
                 roomRepository.removeWaitingRoom(roomId);
             }
 
@@ -118,7 +121,7 @@ public class LobbyService {
             log.info("방 입장 완료: room={}, player={}", roomId, nickname);
 
         } finally {
-            redisLockRepository.unlock(roomId);
+            redisLockRepository.unlock(roomId, lockToken);
         }
     }
 }
