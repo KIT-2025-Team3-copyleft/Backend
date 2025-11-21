@@ -29,7 +29,10 @@ public class LobbyService {
 
     public void createRoom(String sessionId) {
         String nickname = nicknameRepository.getNicknameBySessionId(sessionId);
-        if (nickname == null) return;
+        if (nickname == null) {
+            responseSender.sendError(sessionId, ErrorCode.INVALID_NICKNAME);
+            return;
+        }
 
         String roomId = RandomUtil.generateRoomId();
         String roomCode = RandomUtil.generateRoomCode();
