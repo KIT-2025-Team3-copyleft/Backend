@@ -4,15 +4,11 @@ import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
-import com.copyleft.GodsChoice.feature.lobby.dto.LobbyResponse;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
-import com.copyleft.GodsChoice.global.constant.GameCode;
-import com.copyleft.GodsChoice.global.constant.SocketEvent;
 import com.copyleft.GodsChoice.global.util.RandomUtil;
 import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
 import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
-import com.copyleft.GodsChoice.infra.websocket.WebSocketSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,9 +26,7 @@ public class LobbyService {
 
     private final LobbyResponseSender responseSender;
 
-    /**
-     * 방 만들기 (CREATE_ROOM)
-     */
+
     public void createRoom(String sessionId) {
         String nickname = nicknameRepository.getNicknameBySessionId(sessionId);
         if (nickname == null) return;
@@ -43,17 +37,7 @@ public class LobbyService {
 
         Player host = Player.createHost(sessionId, nickname);
 
-        Room room = Room.builder()
-                .roomId(roomId)
-                .roomCode(roomCode)
-                .roomTitle(roomTitle)
-                .hostSessionId(sessionId)
-                .status(RoomStatus.WAITING)
-                .currentHp(1000)
-                .currentRound(1)
-                .build();
-
-        room.addPlayer(host);
+        Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
 
         roomRepository.saveRoom(room);
         roomRepository.saveRoomCodeMapping(roomCode, roomId);
