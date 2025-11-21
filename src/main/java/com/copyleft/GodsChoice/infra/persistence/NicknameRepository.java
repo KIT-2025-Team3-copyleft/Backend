@@ -18,8 +18,9 @@ public class NicknameRepository {
         return result != null && result;
     }
 
-    public void addNickname(String nickname) {
-        redisTemplate.opsForSet().add(KEY_ACTIVE_NICKNAMES, nickname);
+    public boolean reserveNickname(String nickname) {
+        Long addedCount = redisTemplate.opsForSet().add(KEY_ACTIVE_NICKNAMES, nickname);
+        return addedCount != null && addedCount > 0;
     }
 
     public void removeNickname(String nickname) {

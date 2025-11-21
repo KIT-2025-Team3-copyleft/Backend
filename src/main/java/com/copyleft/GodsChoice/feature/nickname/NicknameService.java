@@ -19,19 +19,34 @@ public class NicknameService {
 
 
     public void setNickname(String sessionId, String nickname) {
+
         if (!StringUtils.hasText(nickname) || nickname.length() < 2 || nickname.length() > 6) {
             sendError(sessionId, "INVALID_NICKNAME", "닉네임은 2~6자 사이여야 합니다.");
             return;
         }
 
-        if (nicknameRepository.isNicknameExists(nickname)) {
+        String oldNickname = nicknameRepository.getNicknameBySessionId(sessionId);
+        if (oldNickname != null && !oldNickname.equals(nickname)) {
+            nicknameRepository.removeNickname(oldNickname);
+            log.info("기존 닉네임 정리: session={}, old={}", sessionId, oldNickname);
+        } else if (oldNickname != null && oldNickname.equals(nickname)) {
+            sendSuccess(sessionId, nickname);
+            return;
+        }
+
+        boolean isReserved = nicknameRepository.reserveNickname(nickname);
+
+        if (!isReserved) {
             sendDuplicate(sessionId);
             return;
         }
 
-        nicknameRepository.addNickname(nickname);
         nicknameRepository.saveSessionNicknameMapping(sessionId, nickname);
 
+        sendSuccess(sessionId, nickname);
+    }
+
+    private void sendSuccess(String sessionId, String nickname) {
         Player newPlayer = Player.builder()
                 .sessionId(sessionId)
                 .nickname(nickname)
