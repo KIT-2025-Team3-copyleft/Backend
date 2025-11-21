@@ -9,6 +9,7 @@ import lombok.ToString;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Getter
@@ -53,7 +54,7 @@ public class Room {
 
     public void removePlayer(String sessionId) {
         if (this.players != null) {
-            this.players.removeIf(p -> p.getSessionId().equals(sessionId));
+            this.players.removeIf(p -> Objects.equals(p.getSessionId(), sessionId));
         }
     }
 
