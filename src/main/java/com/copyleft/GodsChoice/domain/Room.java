@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.domain;
 
+import com.copyleft.GodsChoice.domain.type.RoomStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,6 +26,8 @@ public class Room {
     private String roomCode;      // 유저 공유용 코드
     private String hostSessionId; // 방장의 sessionId
 
+    public static final int MAX_PLAYER_COUNT = 4;
+
     @Builder.Default
     private List<Player> players = new ArrayList<>();
 
@@ -39,7 +42,7 @@ public class Room {
     @Builder.Default
     private boolean isVotingDisabled = false; // 배신자 색출 후 투표 잠금 여부
 
-    private String status;        // "WAITING", "STARTING", "PLAYING"
+    private RoomStatus status;        // "WAITING", "STARTING", "PLAYING"
     private String currentPhase;  // "CARD_SELECT", "JUDGING", "VOTE_PROPOSAL" 등
 
     @Builder.Default
@@ -58,17 +61,14 @@ public class Room {
         }
     }
 
-    public static Room create(String roomTitle, String hostSessionId, Player hostPlayer) {
-        // 코드생성 수정필요
-        String uuid = UUID.randomUUID().toString();
-        String code = uuid.substring(0, 4).toUpperCase();
+    public static Room create(String roomId, String roomCode, String roomTitle, String hostSessionId, Player hostPlayer) {
 
         Room room = Room.builder()
-                .roomId(uuid)
-                .roomCode(code)
+                .roomId(roomId)
+                .roomCode(roomCode)
                 .roomTitle(roomTitle)
                 .hostSessionId(hostSessionId)
-                .status("WAITING")
+                .status(RoomStatus.WAITING) // [Enum 사용 확인]
                 .currentHp(1000)
                 .currentRound(1)
                 .isVotingDisabled(false)
