@@ -1,5 +1,8 @@
 package com.copyleft.GodsChoice.infra.websocket;
 
+import com.copyleft.GodsChoice.feature.nickname.NicknameService;
+import com.copyleft.GodsChoice.feature.nickname.dto.SetNicknameRequest;
+import com.copyleft.GodsChoice.infra.websocket.dto.WebSocketRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +20,8 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
     private final WebSocketSessionManager sessionManager;
     private final ObjectMapper objectMapper;
 
+    private final NicknameService nicknameService;
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         log.info("새로운 세션 연결: {}", session.getId());
@@ -25,13 +30,24 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        String payload = message.getPayload(); // 수신된 JSON 문자열
-        log.debug("메시지 수신: [세션 ID: {}], [페이로드: {}]", session.getId(), payload);
+        String payload = message.getPayload();
 
         try {
-            session.sendMessage(new TextMessage("서버가 받은 메시지: " + payload));
+            WebSocketRequest request = objectMapper.readValue(payload, WebSocketRequest.class);
+            log.info("Action 수신: {}, Session: {}", request.getAction(), session.getId());
+
+            switch (request.getAction()) {
+                case "SET_NICKNAME":
+                    SetNicknameRequest nicknameDto = objectMapper.treeToValue(request.getPayload(), SetNicknameRequest.class);
+                    nicknameService.setNickname(session.getId(), nicknameDto.getNickname());
+                    break;
+
+                default:
+                    log.warn("알 수 없는 Action입니다: {}", request.getAction());
+            }
+
         } catch (Exception e) {
-            log.error("메시지 처리 중 오류 발생: {}", e.getMessage(), e);
+            log.error("메시지 처리 중 오류: {}", e.getMessage(), e);
         }
     }
 
