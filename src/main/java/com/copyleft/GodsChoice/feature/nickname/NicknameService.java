@@ -1,7 +1,10 @@
 package com.copyleft.GodsChoice.feature.nickname;
 
 import com.copyleft.GodsChoice.domain.Player;
+import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
 import com.copyleft.GodsChoice.feature.nickname.dto.NicknameResponse;
+import com.copyleft.GodsChoice.global.constant.ErrorCode;
+import com.copyleft.GodsChoice.global.constant.SocketEvent;
 import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
 import com.copyleft.GodsChoice.infra.websocket.WebSocketSender;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +24,7 @@ public class NicknameService {
     public void setNickname(String sessionId, String nickname) {
 
         if (!StringUtils.hasText(nickname) || nickname.length() < 2 || nickname.length() > 6) {
-            sendError(sessionId, "INVALID_NICKNAME", "닉네임은 2~6자 사이여야 합니다.");
+            sendError(sessionId, ErrorCode.INVALID_NICKNAME);
             return;
         }
 
@@ -50,11 +53,11 @@ public class NicknameService {
         Player newPlayer = Player.builder()
                 .sessionId(sessionId)
                 .nickname(nickname)
-                .connectionStatus("CONNECTED")
+                .connectionStatus(ConnectionStatus.CONNECTED)
                 .build();
 
         NicknameResponse response = NicknameResponse.builder()
-                .event("NICKNAME_SUCCESS")
+                .event(SocketEvent.NICKNAME_SUCCESS.name())
                 .player(newPlayer)
                 .build();
 
@@ -62,19 +65,19 @@ public class NicknameService {
         log.info("닉네임 설정 완료: session={}, nickname={}", sessionId, nickname);
     }
 
-    private void sendError(String sessionId, String code, String message) {
+    private void sendError(String sessionId, ErrorCode errorCode) {
         NicknameResponse response = NicknameResponse.builder()
-                .event("ERROR_MESSAGE")
-                .code(code)
-                .message(message)
+                .event(SocketEvent.ERROR_MESSAGE.name())
+                .code(errorCode.name())
+                .message(errorCode.getMessage())
                 .build();
         webSocketSender.sendEventToSession(sessionId, response);
     }
 
     private void sendDuplicate(String sessionId) {
         NicknameResponse response = NicknameResponse.builder()
-                .event("NICKNAME_DUPLICATE")
-                .message("이미 사용 중인 닉네임입니다.")
+                .event(SocketEvent.NICKNAME_DUPLICATE.name())
+                .message(ErrorCode.NICKNAME_ALREADY_USE.getMessage())
                 .build();
         webSocketSender.sendEventToSession(sessionId, response);
     }

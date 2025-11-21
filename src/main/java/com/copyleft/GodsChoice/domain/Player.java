@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.domain;
 
+import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,7 +25,7 @@ public class Player {
     private String slot;  // "주체", "대상", "어떻게", "어쩐다"
 
     // "CONNECTED", "DISCONNECTED"
-    private String connectionStatus;
+    private ConnectionStatus connectionStatus;
 
     private String selectedCard; // 현재 라운드에서 선택한 카드 텍스트
     private String voteTarget;   // 현재 투표에서 지목한 대상의 sessionId
@@ -34,7 +35,7 @@ public class Player {
                 .sessionId(sessionId)
                 .nickname(nickname)
                 .isHost(true)
-                .connectionStatus("CONNECTED")
+                .connectionStatus(ConnectionStatus.CONNECTED)
                 .build();
     }
 }
