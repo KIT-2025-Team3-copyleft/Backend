@@ -1,5 +1,7 @@
 package com.copyleft.GodsChoice.infra.websocket;
 
+import com.copyleft.GodsChoice.feature.lobby.LobbyService;
+import com.copyleft.GodsChoice.feature.lobby.dto.LobbyRequest;
 import com.copyleft.GodsChoice.feature.nickname.NicknameService;
 import com.copyleft.GodsChoice.feature.nickname.dto.SetNicknameRequest;
 import com.copyleft.GodsChoice.infra.websocket.dto.WebSocketRequest;
@@ -21,6 +23,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
     private final ObjectMapper objectMapper;
 
     private final NicknameService nicknameService;
+    private final LobbyService lobbyService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -42,6 +45,23 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     nicknameService.setNickname(session.getId(), nicknameDto.getNickname());
                     break;
 
+                case "CREATE_ROOM":
+                    lobbyService.createRoom(session.getId());
+                    break;
+
+                case "QUICK_JOIN":
+                    lobbyService.quickJoin(session.getId());
+                    break;
+
+                case "JOIN_BY_CODE":
+                    LobbyRequest lobbyDto = objectMapper.treeToValue(request.getPayload(), LobbyRequest.class);
+                    if (lobbyDto != null && lobbyDto.getRoomCode() != null) {
+                        lobbyService.joinRoomByCode(session.getId(), lobbyDto.getRoomCode());
+                    } else {
+                        log.warn("JOIN_BY_CODE 요청에 roomCode가 없습니다.");
+                    }
+                    break;
+
                 default:
                     log.warn("알 수 없는 Action입니다: {}", request.getAction());
             }
@@ -55,6 +75,8 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         log.info("세션 연결 종료: {} (사유: {})", session.getId(), status);
         sessionManager.removeSession(session);
+
+        nicknameService.handleDisconnect(session.getId());
     }
 
     @Override
