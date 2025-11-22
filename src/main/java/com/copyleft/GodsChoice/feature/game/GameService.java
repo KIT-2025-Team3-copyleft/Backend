@@ -99,14 +99,23 @@ public class GameService {
                 return;
             }
 
-            room.setStatus(RoomStatus.PLAYING);
+            if (room.getPlayers().size() < Room.MAX_PLAYER_COUNT) {
+                log.warn("게임 시작 실패 (인원 부족): {}", roomId);
+                room.setStatus(RoomStatus.WAITING);
+                roomRepository.saveRoom(room);
+                return;
+            }
 
-            room.assignRoles();
 
             try {
+                room.setStatus(RoomStatus.PLAYING);
+                room.assignRoles();
+
                 roomRepository.saveRoom(room);
                 roomRepository.removeWaitingRoom(roomId);
                 gameResponseSender.broadcastLoadGameScene(room);
+
+                log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
             } catch (Exception e) {
                 log.error("게임 시작 처리 중 저장/전송 오류: room={}", roomId, e);
             }

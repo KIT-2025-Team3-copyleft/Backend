@@ -153,11 +153,7 @@ public class LobbyService {
             }
             Room room = roomOpt.get();
 
-            boolean wasHost = room.getPlayers().stream()
-                    .filter(p -> p.getSessionId().equals(sessionId))
-                    .findFirst()
-                    .map(Player::isHost)
-                    .orElse(false);
+            boolean wasHost = sessionId.equals(room.getHostSessionId());
 
             room.removePlayer(sessionId);
             responseSender.sendLeaveSuccess(sessionId);
