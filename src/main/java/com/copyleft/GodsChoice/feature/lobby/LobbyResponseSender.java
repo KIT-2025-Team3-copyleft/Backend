@@ -38,7 +38,7 @@ public class LobbyResponseSender {
         webSocketSender.sendEventToSession(sessionId, response);
     }
 
-    public void broadcastLobbyUpdate(String roomId, Room room) {
+    public void broadcastLobbyUpdate(Room room) {
         LobbyResponse response = createResponse(
                 SocketEvent.LOBBY_UPDATE,
                 room,

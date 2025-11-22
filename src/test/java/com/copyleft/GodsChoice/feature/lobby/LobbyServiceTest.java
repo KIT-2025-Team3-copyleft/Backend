@@ -123,7 +123,7 @@ class LobbyServiceTest {
         //  Room.builder()는 players를 빈 리스트로 초기화하므로, addPlayer 후 size는 1이 됩니다.)
 
         verify(responseSender).sendJoinSuccess(sessionId, existingRoom);
-        verify(responseSender).broadcastLobbyUpdate(roomId, existingRoom);
+        verify(responseSender).broadcastLobbyUpdate(existingRoom);
 
         verify(redisLockRepository).unlock(eq(roomId), anyString());
     }

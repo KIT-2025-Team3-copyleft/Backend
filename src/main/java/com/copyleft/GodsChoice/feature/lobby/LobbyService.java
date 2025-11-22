@@ -121,7 +121,7 @@ public class LobbyService {
             }
 
             responseSender.sendJoinSuccess(sessionId, room);
-            responseSender.broadcastLobbyUpdate(roomId, room);
+            responseSender.broadcastLobbyUpdate(room);
 
             log.info("방 입장 완료: room={}, player={}", roomId, nickname);
 
@@ -175,10 +175,13 @@ public class LobbyService {
 
             if (room.getStatus() == RoomStatus.STARTING) {
                 room.setStatus(RoomStatus.WAITING);
+
+                responseSender.broadcastTimerCancelled(room);
+                log.info("게임 시작 카운트다운 중단: {}", roomId);
             }
 
             roomRepository.saveRoom(room);
-            responseSender.broadcastLobbyUpdate(roomId, room);
+            responseSender.broadcastLobbyUpdate(room);
 
             log.info("방 퇴장 처리 완료: session={}, room={}", sessionId, roomId);
 
