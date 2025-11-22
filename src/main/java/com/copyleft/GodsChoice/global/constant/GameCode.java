@@ -11,7 +11,10 @@ public enum GameCode {
     ROOM_JOIN_SUCCESS("방 입장에 성공했습니다."),
     ROOM_LEAVE_SUCCESS("방에서 퇴장했습니다."),
 
-    GAME_START_SOON("잠시 후 게임이 시작됩니다.");
+    GAME_START_SOON("잠시 후 게임이 시작됩니다."),
+    GAME_COUNTDOWN_START("게임 시작 3초 전!"),
+    GAME_TIMER_CANCELLED("플레이어 퇴장으로 게임 시작이 취소되었습니다.");
+
 
     private final String message;
 }
