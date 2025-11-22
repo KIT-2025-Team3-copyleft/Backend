@@ -43,6 +43,7 @@ public class LobbyService {
         Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
 
         roomRepository.saveRoom(room);
+        roomRepository.saveSessionRoomMapping(sessionId, roomId);
         roomRepository.saveRoomCodeMapping(roomCode, roomId);
         roomRepository.addWaitingRoom(roomId);
 
@@ -113,6 +114,7 @@ public class LobbyService {
 
             room.addPlayer(newPlayer);
             roomRepository.saveRoom(room);
+            roomRepository.saveSessionRoomMapping(sessionId, roomId);
 
             if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
                 roomRepository.removeWaitingRoom(roomId);
@@ -122,6 +124,63 @@ public class LobbyService {
             responseSender.broadcastLobbyUpdate(roomId, room);
 
             log.info("방 입장 완료: room={}, player={}", roomId, nickname);
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    public void leaveRoom(String sessionId) {
+        String roomId = roomRepository.getRoomIdBySessionId(sessionId);
+        if (roomId == null) {
+            log.warn("방 나가기 실패: 해당 세션({})은 방에 속해있지 않습니다.", sessionId);
+            return;
+        }
+
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) {
+            responseSender.sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
+            return;
+        }
+
+        try {
+            roomRepository.deleteSessionRoomMapping(sessionId);
+
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) {
+                responseSender.sendLeaveSuccess(sessionId);
+                return;
+            }
+            Room room = roomOpt.get();
+
+            boolean wasHost = room.getPlayers().stream()
+                    .filter(p -> p.getSessionId().equals(sessionId))
+                    .findFirst()
+                    .map(Player::isHost)
+                    .orElse(false);
+
+            room.removePlayer(sessionId);
+            responseSender.sendLeaveSuccess(sessionId);
+
+            if (room.isEmpty()) {
+                roomRepository.deleteRoom(roomId, room.getRoomCode());
+                log.info("방 삭제 완료: {}", roomId);
+                return;
+            }
+
+            if (wasHost) {
+                String newHostSessionId = room.delegateHost();
+                log.info("방장 위임: 구 방장={} -> 새 방장={}", sessionId, newHostSessionId);
+            }
+
+            if (room.getStatus() == RoomStatus.STARTING) {
+                room.setStatus(RoomStatus.WAITING);
+            }
+
+            roomRepository.saveRoom(room);
+            responseSender.broadcastLobbyUpdate(roomId, room);
+
+            log.info("방 퇴장 처리 완료: session={}, room={}", sessionId, roomId);
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);

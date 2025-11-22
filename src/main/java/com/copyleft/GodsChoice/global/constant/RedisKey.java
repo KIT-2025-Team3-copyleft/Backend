@@ -14,7 +14,8 @@ public enum RedisKey {
     ROOM_CODE("room_code:"),              // String (room_code:B3FK)
     WAITING_ROOMS("waiting_rooms"),       // Set
 
-    ROOM_LOG("room_log:");                // List (room_log:uuid)
+    ROOM_LOG("room_log:"),                // List (room_log:uuid)
+    SESSION_ROOM("session_room:");        // String (session_room:abc-123 -> roomId)
 
     private final String prefix;
 

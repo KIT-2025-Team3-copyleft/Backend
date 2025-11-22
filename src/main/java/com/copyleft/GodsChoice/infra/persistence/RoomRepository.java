@@ -66,4 +66,17 @@ public class RoomRepository {
         redisTemplate.delete(RedisKey.ROOM_CODE.makeKey(roomCode));
         removeWaitingRoom(roomId);
     }
+
+    public void saveSessionRoomMapping(String sessionId, String roomId) {
+        redisTemplate.opsForValue().set(RedisKey.SESSION_ROOM.makeKey(sessionId), roomId);
+    }
+
+    public String getRoomIdBySessionId(String sessionId) {
+        Object result = redisTemplate.opsForValue().get(RedisKey.SESSION_ROOM.makeKey(sessionId));
+        return result != null ? result.toString() : null;
+    }
+
+    public void deleteSessionRoomMapping(String sessionId) {
+        redisTemplate.delete(RedisKey.SESSION_ROOM.makeKey(sessionId));
+    }
 }

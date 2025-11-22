@@ -7,6 +7,7 @@ public enum SocketEvent {
     JOIN_SUCCESS,
     JOIN_FAILED,
     LOBBY_UPDATE,
+    LEAVE_SUCCESS,
 
     ERROR_MESSAGE
 }

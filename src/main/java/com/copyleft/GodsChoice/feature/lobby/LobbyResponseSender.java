@@ -60,4 +60,13 @@ public class LobbyResponseSender {
 
         webSocketSender.sendEventToSession(sessionId, response);
     }
+
+    public void sendLeaveSuccess(String sessionId) {
+        LobbyResponse response = LobbyResponse.builder()
+                .event(SocketEvent.LEAVE_SUCCESS.name())
+                .message(GameCode.ROOM_LEAVE_SUCCESS.getMessage())
+                .build();
+
+        webSocketSender.sendEventToSession(sessionId, response);
+    }
 }

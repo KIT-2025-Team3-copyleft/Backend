@@ -78,4 +78,26 @@ public class Room {
         room.addPlayer(hostPlayer);
         return room;
     }
+
+    public String delegateHost() {
+        if (this.players.isEmpty()) {
+            return null;
+        }
+
+        for (Player p : this.players) {
+            p.setHost(false);
+        }
+
+        Player newHost = this.players.get(0);
+        newHost.setHost(true);
+
+        this.hostSessionId = newHost.getSessionId();
+        this.roomTitle = newHost.getNickname() + "님의 방";
+
+        return newHost.getSessionId();
+    }
+
+    public boolean isEmpty() {
+        return this.players.isEmpty();
+    }
 }
