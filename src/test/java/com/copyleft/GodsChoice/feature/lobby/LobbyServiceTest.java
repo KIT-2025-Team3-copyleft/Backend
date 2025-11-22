@@ -81,7 +81,7 @@ class LobbyServiceTest {
         String roomId = "room-uuid";
 
         when(roomRepository.getRandomWaitingRoomId()).thenReturn(roomId);
-        when(redisLockRepository.lock(roomId)).thenReturn(false);
+        when(redisLockRepository.lock(roomId)).thenReturn(null);
 
         // when
         lobbyService.quickJoin(sessionId);
@@ -99,6 +99,7 @@ class LobbyServiceTest {
         String sessionId = "guest-session";
         String roomId = "room-uuid";
         String nickname = "게스트";
+        String mockToken = "lock-token-1234";
 
         Room existingRoom = Room.builder()
                 .roomId(roomId)
@@ -106,7 +107,7 @@ class LobbyServiceTest {
                 .build();
 
         when(roomRepository.getRandomWaitingRoomId()).thenReturn(roomId);
-        when(redisLockRepository.lock(roomId)).thenReturn(true); // 락 성공
+        when(redisLockRepository.lock(roomId)).thenReturn(mockToken);
         when(roomRepository.findRoomById(roomId)).thenReturn(Optional.of(existingRoom));
         when(nicknameRepository.getNicknameBySessionId(sessionId)).thenReturn(nickname);
 
@@ -122,8 +123,8 @@ class LobbyServiceTest {
         //  Room.builder()는 players를 빈 리스트로 초기화하므로, addPlayer 후 size는 1이 됩니다.)
 
         verify(responseSender).sendJoinSuccess(sessionId, existingRoom);
-        verify(responseSender).broadcastLobbyUpdate(roomId, existingRoom);
+        verify(responseSender).broadcastLobbyUpdate(existingRoom);
 
-        verify(redisLockRepository).unlock(roomId);
+        verify(redisLockRepository).unlock(eq(roomId), anyString());
     }
 }

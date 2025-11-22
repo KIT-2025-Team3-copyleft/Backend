@@ -18,11 +18,13 @@ public class RoomRepository {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper; // Room 객체 변환용
 
+    private static final long ROOM_TTL_HOURS = 1L;
+
     public void saveRoom(Room room) {
         String key = RedisKey.ROOM.makeKey(room.getRoomId());
 
         redisTemplate.opsForValue().set(key, room);
-        redisTemplate.expire(key, 1, TimeUnit.HOURS);
+        redisTemplate.expire(key, ROOM_TTL_HOURS, TimeUnit.HOURS);
     }
 
     public Optional<Room> findRoomById(String roomId) {
@@ -65,5 +67,22 @@ public class RoomRepository {
         redisTemplate.delete(RedisKey.ROOM.makeKey(roomId));
         redisTemplate.delete(RedisKey.ROOM_CODE.makeKey(roomCode));
         removeWaitingRoom(roomId);
+    }
+
+    public void saveSessionRoomMapping(String sessionId, String roomId) {
+        redisTemplate.opsForValue().set(
+                RedisKey.SESSION_ROOM.makeKey(sessionId),
+                roomId,
+                ROOM_TTL_HOURS, TimeUnit.HOURS
+        );
+    }
+
+    public String getRoomIdBySessionId(String sessionId) {
+        Object result = redisTemplate.opsForValue().get(RedisKey.SESSION_ROOM.makeKey(sessionId));
+        return result != null ? result.toString() : null;
+    }
+
+    public void deleteSessionRoomMapping(String sessionId) {
+        redisTemplate.delete(RedisKey.SESSION_ROOM.makeKey(sessionId));
     }
 }

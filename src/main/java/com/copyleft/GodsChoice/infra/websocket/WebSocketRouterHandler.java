@@ -62,6 +62,10 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     }
                     break;
 
+                case "LEAVE_ROOM":
+                    lobbyService.leaveRoom(session.getId());
+                    break;
+
                 default:
                     log.warn("알 수 없는 Action입니다: {}", request.getAction());
             }
@@ -75,7 +79,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         log.info("세션 연결 종료: {} (사유: {})", session.getId(), status);
         sessionManager.removeSession(session);
-
+        lobbyService.leaveRoom(session.getId());
         nicknameService.handleDisconnect(session.getId());
     }
 
