@@ -28,6 +28,7 @@ public class GameService {
 
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) {
+            log.warn("게임 시작 락 획득 실패: room={}, session={}", roomId, sessionId);
             gameResponseSender.sendError(sessionId, ErrorCode.ROOM_NOT_FOUND);
             return;
         }
@@ -103,6 +104,7 @@ public class GameService {
                 log.warn("게임 시작 실패 (인원 부족): {}", roomId);
                 room.setStatus(RoomStatus.WAITING);
                 roomRepository.saveRoom(room);
+                gameResponseSender.broadcastGameStartCancelled(room);
                 return;
             }
 
@@ -119,8 +121,6 @@ public class GameService {
             } catch (Exception e) {
                 log.error("게임 시작 처리 중 저장/전송 오류: room={}", roomId, e);
             }
-
-            log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);

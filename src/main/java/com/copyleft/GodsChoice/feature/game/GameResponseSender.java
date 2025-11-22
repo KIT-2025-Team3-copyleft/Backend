@@ -37,6 +37,16 @@ public class GameResponseSender {
         broadcastToRoom(room, response);
     }
 
+    public void broadcastGameStartCancelled(Room room) {
+        GameResponse response = createResponse(
+                SocketEvent.TIMER_CANCELLED,
+                null,
+                GameCode.GAME_TIMER_CANCELLED.getMessage(),
+                null
+        );
+        broadcastToRoom(room, response);
+    }
+
     public void sendError(String sessionId, ErrorCode errorCode) {
         GameResponse response = createResponse(
                 SocketEvent.ERROR_MESSAGE,
