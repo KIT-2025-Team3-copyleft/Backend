@@ -145,10 +145,9 @@ public class LobbyService {
         }
 
         try {
-            roomRepository.deleteSessionRoomMapping(sessionId);
-
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
             if (roomOpt.isEmpty()) {
+                roomRepository.deleteSessionRoomMapping(sessionId);
                 responseSender.sendLeaveSuccess(sessionId);
                 return;
             }
@@ -157,6 +156,7 @@ public class LobbyService {
             boolean wasHost = sessionId.equals(room.getHostSessionId());
 
             room.removePlayer(sessionId);
+            roomRepository.deleteSessionRoomMapping(sessionId);
             responseSender.sendLeaveSuccess(sessionId);
 
             if (room.isEmpty()) {

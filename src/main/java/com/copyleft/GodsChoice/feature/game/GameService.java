@@ -28,7 +28,7 @@ public class GameService {
 
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) {
-            log.warn("게임 시작 락 획득 실패: room={}, session={}", roomId, sessionId);
+            log.warn("게임 시작 실패 (세션-방 매핑 없음): session={}", sessionId);
             gameResponseSender.sendError(sessionId, ErrorCode.ROOM_NOT_FOUND);
             return;
         }
