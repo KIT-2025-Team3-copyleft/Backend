@@ -24,6 +24,7 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - GROQ_API_KEY=${GROQ_API_KEY}
     depends_on:
       - redis
       - mysql
@@ -40,6 +41,7 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - GROQ_API_KEY=${GROQ_API_KEY}
     depends_on:
       - redis
       - mysql
