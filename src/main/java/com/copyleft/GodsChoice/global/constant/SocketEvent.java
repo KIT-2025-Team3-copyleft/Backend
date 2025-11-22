@@ -13,5 +13,8 @@ public enum SocketEvent {
     TIMER_CANCELLED,
     LOAD_GAME_SCENE,
 
+    ROUND_START,
+    RECEIVE_CARDS,
+
     ERROR_MESSAGE
 }
