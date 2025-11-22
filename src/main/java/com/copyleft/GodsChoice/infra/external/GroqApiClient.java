@@ -61,12 +61,16 @@ public class GroqApiClient {
             GroqResponse response = restTemplate.postForObject(apiUrl, entity, GroqResponse.class);
 
             if (response != null && response.getChoices() != null && !response.getChoices().isEmpty()) {
-                String content = response.getChoices().get(0).getMessage().getContent();
-                log.info("AI 응답 원본: {}", content);
-                return extractJson(content);
+                GroqResponse.Choice firstChoice = response.getChoices().get(0);
+                if (firstChoice != null && firstChoice.getMessage() != null && firstChoice.getMessage().getContent() != null) {
+                    String content = firstChoice.getMessage().getContent();
+                    log.info("AI 응답 원본: {}", content);
+                    return extractJson(content);
+                }
+                log.warn("Groq API 응답 구조 이상 (content 없음): {}", response);
             }
         } catch (Exception e) {
-            log.error("Groq API 호출 실패: {}", e.getMessage());
+            log.error("Groq API 호출 실패", e);
             return "{\"score\": 0, \"reason\": \"신이 침묵합니다.\"}";
         }
 

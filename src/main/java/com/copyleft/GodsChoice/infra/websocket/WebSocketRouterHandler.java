@@ -69,9 +69,11 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     break;
 
                 case "SELECT_CARD":
-                    if (request.getPayload().has("card")) {
+                    if (request.getPayload() != null && request.getPayload().has("card")) {
                         String card = request.getPayload().get("card").asText();
                         gameService.selectCard(session.getId(), card);
+                    } else {
+                        log.warn("SELECT_CARD 요청 오류: payload가 없거나 card 필드 누락. session={}", session.getId());
                     }
                     break;
 

@@ -203,6 +203,8 @@ public class GameService {
     }
 
     public void processCardTimeout(String roomId) {
+        boolean shouldJudge = false;
+
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
             log.error("타임아웃 처리 락 획득 실패: {}", roomId);
@@ -237,10 +239,14 @@ public class GameService {
             }
 
             gameResponseSender.broadcastAllCardsSelected(room);
-            judgeRound(roomId);
+            shouldJudge = true;
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
+        }
+
+        if (shouldJudge) {
+            judgeRound(roomId);
         }
     }
 
@@ -249,6 +255,8 @@ public class GameService {
 
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) return;
+
+        boolean shouldJudge = false;
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) return;
@@ -282,12 +290,15 @@ public class GameService {
             if (allSelected) {
                 log.info("전원 카드 선택 완료! AI 심판을 시작합니다. room={}", roomId);
                 gameResponseSender.broadcastAllCardsSelected(room);
-
-                judgeRound(roomId);
+                shouldJudge = true;
             }
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
+        }
+
+        if (shouldJudge) {
+            judgeRound(roomId);
         }
     }
 
