@@ -80,7 +80,7 @@ public class Room {
     }
 
     public String delegateHost() {
-        if (this.players.isEmpty()) {
+        if (this.players == null || this.players.isEmpty()) {
             return null;
         }
 
@@ -98,6 +98,14 @@ public class Room {
     }
 
     public boolean isEmpty() {
-        return this.players.isEmpty();
+        return this.players == null || this.players.isEmpty();
+    }
+
+    public void assignRoles() {
+        if (this.players == null || this.players.isEmpty()) return;
+
+        for (Player player : this.players) {
+            player.setRole("CITIZEN");
+        }
     }
 }
