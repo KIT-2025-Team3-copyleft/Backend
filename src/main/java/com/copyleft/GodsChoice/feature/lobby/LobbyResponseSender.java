@@ -48,7 +48,7 @@ public class LobbyResponseSender {
         broadcastToRoom(room, response);
     }
 
-    public void broadcastTimerCancelled(String roomId, Room room) {
+    public void broadcastTimerCancelled(Room room) {
         LobbyResponse response = createResponse(
                 SocketEvent.TIMER_CANCELLED,
                 null,

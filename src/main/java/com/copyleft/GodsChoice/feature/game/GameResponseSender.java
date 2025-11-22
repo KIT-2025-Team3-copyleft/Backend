@@ -57,7 +57,7 @@ public class GameResponseSender {
     }
 
     private void broadcastToRoom(Room room, GameResponse response) {
-        if (room.getPlayers() != null) {
+        if (room != null && room.getPlayers() != null) {
             for (Player player : room.getPlayers()) {
                 if (player.getConnectionStatus() == ConnectionStatus.CONNECTED) {
                     webSocketSender.sendEventToSession(player.getSessionId(), response);
