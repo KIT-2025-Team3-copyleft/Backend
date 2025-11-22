@@ -130,4 +130,28 @@ class GameServiceTest {
         verify(gameResponseSender).broadcastLoadGameScene(room); // 씬 이동 알림 확인
         verify(redisLockRepository).unlock(roomId, lockToken);
     }
+
+    @Test
+    @DisplayName("게임 시작 시 역할이 CITIZEN으로 초기화되는지 검증")
+    void processGameStart_AssignRoles() {
+        // given
+        String roomId = "room-1";
+        String lockToken = "token";
+        Room room = Room.builder().roomId(roomId).status(RoomStatus.STARTING).build();
+        for (int i = 0; i < 4; i++) {
+            room.addPlayer(com.copyleft.GodsChoice.domain.Player.builder()
+                    .sessionId("p" + i)
+                    .build());
+        }
+
+        when(redisLockRepository.lock(roomId)).thenReturn(lockToken);
+        when(roomRepository.findRoomById(roomId)).thenReturn(Optional.of(room));
+
+        // when
+        gameService.processGameStart(roomId);
+
+        // then
+        assertEquals("CITIZEN", room.getPlayers().get(0).getRole());
+        verify(redisLockRepository).unlock(roomId, lockToken);
+    }
 }
