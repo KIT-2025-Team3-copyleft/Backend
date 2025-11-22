@@ -57,6 +57,29 @@ public class GameResponseSender {
         broadcastToRoom(room, response);
     }
 
+    public void broadcastAllCardsSelected(Room room) {
+        GameResponse response = createResponse(
+                SocketEvent.ALL_CARDS_SELECTED,
+                room,
+                GameCode.ALL_USERS_SELECTED.getMessage(),
+                null
+        );
+        broadcastToRoom(room, response);
+    }
+
+    public void broadcastRoundResult(Room room, int score, String reason, String sentence) {
+        GameResponse response = GameResponse.builder()
+                .event(SocketEvent.ROUND_RESULT.name())
+                .room(room)
+                .score(score)
+                .reason(reason)
+                .sentence(sentence)
+                .message(reason)
+                .build();
+
+        broadcastToRoom(room, response);
+    }
+
     public void sendCards(String sessionId, String slotType, java.util.List<String> cards) {
         GameResponse response = GameResponse.builder()
                 .event(SocketEvent.RECEIVE_CARDS.name())

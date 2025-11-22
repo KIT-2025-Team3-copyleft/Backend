@@ -16,4 +16,8 @@ public class GameResponse {
 
     private java.util.List<String> cards; // 받을 단어 카드 목록
     private String slotType;              // 내가 맡은 역할 (SUBJECT, TARGET 등)
+
+    private Integer score;
+    private String reason;
+    private String sentence;
 }

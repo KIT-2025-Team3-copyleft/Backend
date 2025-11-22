@@ -15,6 +15,9 @@ public enum SocketEvent {
 
     ROUND_START,
     RECEIVE_CARDS,
+    CARD_SELECTED_CONFIRMED, // 내 선택 확인
+    ALL_CARDS_SELECTED,      // 전원 선택 완료 (심판 대기)
+    ROUND_RESULT,            // 라운드 결과 (AI 점수)
 
     ERROR_MESSAGE
 }
