@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.domain;
 
+import com.copyleft.GodsChoice.domain.type.PlayerRole;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -105,7 +106,7 @@ public class Room {
         if (this.players == null || this.players.isEmpty()) return;
 
         for (Player player : this.players) {
-            player.setRole("CITIZEN");
+            player.setRole(PlayerRole.CITIZEN.name());
         }
     }
 }

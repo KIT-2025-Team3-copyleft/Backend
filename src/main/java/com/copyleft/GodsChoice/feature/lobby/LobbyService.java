@@ -139,7 +139,7 @@ public class LobbyService {
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            responseSender.sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
+            responseSender.sendError(sessionId, ErrorCode.ROOM_LEAVE_FAILED);
             return;
         }
 

@@ -14,6 +14,7 @@ public enum ErrorCode {
     ROOM_FULL("방의 정원이 초과되었습니다."),
     ROOM_ALREADY_PLAYING("이미 게임이 진행 중인 방입니다."),
     ROOM_JOIN_FAILED("방 입장에 실패했습니다. 다시 시도해주세요."),
+    ROOM_LEAVE_FAILED("방 퇴장 처리 중 오류가 발생했습니다."),
 
     NOT_HOST("방장만 게임을 시작할 수 있습니다."),
     NOT_ENOUGH_PLAYERS("게임 시작을 위해 4명의 플레이어가 필요합니다."),
