@@ -330,16 +330,23 @@ public class GameService {
 
             log.info("AI 심판 시작 (비동기): room={}, 문장='{}'", roomId, sentence);
 
-            String jsonResult = groqApiClient.judgeSentence(sentence, personality);
-
             int score = 0;
             String reason = "신이 침묵합니다.";
+            String jsonResult = null;
             try {
-                JsonNode root = objectMapper.readTree(jsonResult);
-                score = root.path("score").asInt();
-                reason = root.path("reason").asText();
+                jsonResult = groqApiClient.judgeSentence(sentence, personality);
             } catch (Exception e) {
-                log.error("AI 파싱 실패: {}", jsonResult);
+                log.error("AI API 호출 중 예외 발생 (기본값 적용): room={}", roomId, e);
+            }
+
+            if (jsonResult != null) {
+                try {
+                    JsonNode root = objectMapper.readTree(jsonResult);
+                    score = root.path("score").asInt();
+                    reason = root.path("reason").asText();
+                } catch (Exception e) {
+                    log.error("AI 응답 파싱 실패 (기본값 적용): json={}", jsonResult, e);
+                }
             }
 
             int currentHp = room.getCurrentHp();
