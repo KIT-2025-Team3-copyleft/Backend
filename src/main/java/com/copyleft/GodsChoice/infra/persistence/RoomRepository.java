@@ -68,7 +68,11 @@ public class RoomRepository {
     }
 
     public void saveSessionRoomMapping(String sessionId, String roomId) {
-        redisTemplate.opsForValue().set(RedisKey.SESSION_ROOM.makeKey(sessionId), roomId);
+        redisTemplate.opsForValue().set(
+                RedisKey.SESSION_ROOM.makeKey(sessionId),
+                roomId,
+                1, TimeUnit.HOURS
+        );
     }
 
     public String getRoomIdBySessionId(String sessionId) {
