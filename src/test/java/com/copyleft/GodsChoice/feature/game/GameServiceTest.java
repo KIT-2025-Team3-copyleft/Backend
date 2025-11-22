@@ -96,6 +96,7 @@ class GameServiceTest {
         verify(gameResponseSender).sendError(sessionId, ErrorCode.NOT_HOST);
         assertEquals(RoomStatus.WAITING, room.getStatus());
         verify(taskScheduler, never()).schedule(any(), any(Instant.class));
+        verify(redisLockRepository).unlock(roomId, lockToken);
     }
 
     @Test
@@ -110,6 +111,13 @@ class GameServiceTest {
                 .status(RoomStatus.STARTING)
                 .build();
 
+        for (int i = 0; i < 4; i++) {
+            room.addPlayer(com.copyleft.GodsChoice.domain.Player.builder()
+                    .sessionId("player-" + i)
+                    .nickname("Player" + i)
+                    .build());
+        }
+
         when(redisLockRepository.lock(roomId)).thenReturn(lockToken);
         when(roomRepository.findRoomById(roomId)).thenReturn(Optional.of(room));
 
@@ -120,5 +128,6 @@ class GameServiceTest {
         assertEquals(RoomStatus.PLAYING, room.getStatus()); // 상태 변경 확인
         verify(roomRepository).removeWaitingRoom(roomId); // 대기 목록 제거 확인
         verify(gameResponseSender).broadcastLoadGameScene(room); // 씬 이동 알림 확인
+        verify(redisLockRepository).unlock(roomId, lockToken);
     }
 }
