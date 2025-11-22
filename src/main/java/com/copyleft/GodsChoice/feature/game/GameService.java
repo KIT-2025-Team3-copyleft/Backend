@@ -27,7 +27,10 @@ public class GameService {
     public void tryStartGame(String sessionId) {
 
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
-        if (roomId == null) return;
+        if (roomId == null) {
+            gameResponseSender.sendError(sessionId, ErrorCode.ROOM_NOT_FOUND);
+            return;
+        }
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
@@ -37,7 +40,10 @@ public class GameService {
 
         try {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
-            if (roomOpt.isEmpty()) return;
+            if (roomOpt.isEmpty()) {
+                gameResponseSender.sendError(sessionId, ErrorCode.ROOM_NOT_FOUND);
+                return;
+            }
             Room room = roomOpt.get();
 
             // 방장인가?
@@ -54,6 +60,7 @@ public class GameService {
 
             // 대기 상태인가?
             if (room.getStatus() != RoomStatus.WAITING) {
+                gameResponseSender.sendError(sessionId, ErrorCode.ROOM_ALREADY_PLAYING);
                 return;
             }
 
@@ -81,7 +88,10 @@ public class GameService {
 
         try {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
-            if (roomOpt.isEmpty()) return;
+            if (roomOpt.isEmpty()) {
+                log.warn("게임 시작 처리 중 방을 찾을 수 없음: {}", roomId);
+                return;
+            }
             Room room = roomOpt.get();
 
             if (room.getStatus() != RoomStatus.STARTING) {
@@ -91,11 +101,15 @@ public class GameService {
 
             room.setStatus(RoomStatus.PLAYING);
 
-            // room.assignRoles();
+            room.assignRoles();
 
-            roomRepository.saveRoom(room);
-            roomRepository.removeWaitingRoom(roomId);
-            gameResponseSender.broadcastLoadGameScene(room);
+            try {
+                roomRepository.saveRoom(room);
+                roomRepository.removeWaitingRoom(roomId);
+                gameResponseSender.broadcastLoadGameScene(room);
+            } catch (Exception e) {
+                log.error("게임 시작 처리 중 저장/전송 오류: room={}", roomId, e);
+            }
 
             log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
 
