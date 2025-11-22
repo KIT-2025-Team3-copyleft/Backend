@@ -26,16 +26,16 @@ public enum WordData {
     }
 
     // 랜덤으로 5장 뽑기
-    public static List<String> getRandomCards(String slotType, int count) {
+    public static List<String> getRandomCards(SlotType slotType, int count) {
         if (slotType == null) return Collections.emptyList();
 
         try {
-            WordData data = WordData.valueOf(slotType.toUpperCase());
+            WordData data = WordData.valueOf(slotType.name());
             List<String> allWords = new java.util.ArrayList<>(data.getWords());
             Collections.shuffle(allWords);
             return allWords.subList(0, Math.min(count, allWords.size()));
         } catch (Exception e) {
-            return Arrays.asList("오류", "카드", "없음", "ㅠㅠ", "!!");
+            return Arrays.asList("오류", "카드", "없음");
         }
     }
 }

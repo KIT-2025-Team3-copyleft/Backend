@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.domain;
 
+import com.copyleft.GodsChoice.domain.type.GamePhase;
 import com.copyleft.GodsChoice.domain.type.PlayerRole;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
 import lombok.AllArgsConstructor;
@@ -44,7 +45,7 @@ public class Room {
     private boolean isVotingDisabled = false; // 배신자 색출 후 투표 잠금 여부
 
     private RoomStatus status;        // "WAITING", "STARTING", "PLAYING"
-    private String currentPhase;  // "CARD_SELECT", "JUDGING", "VOTE_PROPOSAL" 등
+    private GamePhase currentPhase;  // "CARD_SELECT", "JUDGING", "VOTE_PROPOSAL" 등
 
     @Builder.Default
     private long createdAt = System.currentTimeMillis(); // 생성 시각 (Timestamp)

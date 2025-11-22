@@ -2,7 +2,9 @@ package com.copyleft.GodsChoice.feature.game;
 
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
+import com.copyleft.GodsChoice.domain.type.GamePhase;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
+import com.copyleft.GodsChoice.domain.type.SlotType;
 import com.copyleft.GodsChoice.domain.type.WordData;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
@@ -132,7 +134,7 @@ public class GameService {
                 log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
 
                 startRound(roomId);
-                
+
             } catch (Exception e) {
                 log.error("게임 시작 처리 중 저장/전송 오류 (롤백 시도): room={}", roomId, e);
 
@@ -156,23 +158,25 @@ public class GameService {
             if (roomOpt.isEmpty()) return;
             Room room = roomOpt.get();
 
-            List<String> slots = new ArrayList<>(List.of("SUBJECT", "TARGET", "HOW", "ACTION"));
+            List<SlotType> slots = new ArrayList<>(List.of(
+                    SlotType.SUBJECT, SlotType.TARGET, SlotType.HOW, SlotType.ACTION
+            ));
             Collections.shuffle(slots);
 
             List<Player> players = room.getPlayers();
             for (int i = 0; i < players.size(); i++) {
                 Player player = players.get(i);
-                String assignedSlot = slots.get(i % slots.size());
+                SlotType assignedSlot = slots.get(i % slots.size());
 
                 player.setSlot(assignedSlot);
                 player.setSelectedCard(null);
 
                 List<String> cards = WordData.getRandomCards(assignedSlot, 5);
 
-                gameResponseSender.sendCards(player.getSessionId(), assignedSlot, cards);
+                gameResponseSender.sendCards(player.getSessionId(), assignedSlot.name(), cards);;
             }
 
-            room.setCurrentPhase("CARD_SELECT");
+            room.setCurrentPhase(GamePhase.CARD_SELECT);
 
             roomRepository.saveRoom(room);
             gameResponseSender.broadcastRoundStart(room);

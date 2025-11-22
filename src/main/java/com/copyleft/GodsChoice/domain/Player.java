@@ -1,6 +1,7 @@
 package com.copyleft.GodsChoice.domain;
 
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
+import com.copyleft.GodsChoice.domain.type.SlotType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,7 +23,7 @@ public class Player {
 
     private String color; // "RED", "BLUE" 등
     private String role;  // "CITIZEN", "TRAITOR"
-    private String slot;  // "주체", "대상", "어떻게", "어쩐다"
+    private SlotType slot;  // "주체", "대상", "어떻게", "어쩐다"
 
     // "CONNECTED", "DISCONNECTED"
     private ConnectionStatus connectionStatus;
