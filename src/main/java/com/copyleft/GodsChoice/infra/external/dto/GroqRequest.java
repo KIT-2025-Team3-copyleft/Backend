@@ -1,0 +1,20 @@
+package com.copyleft.GodsChoice.infra.external.dto;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.List;
+
+@Getter
+@Builder
+public class GroqRequest {
+    private String model;
+    private List<Message> messages;
+
+    @Getter
+    @Builder
+    public static class Message {
+        private String role;
+        private String content;
+    }
+}
