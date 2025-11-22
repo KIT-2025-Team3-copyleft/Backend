@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.infra.websocket;
 
+import com.copyleft.GodsChoice.feature.game.GameService;
 import com.copyleft.GodsChoice.feature.lobby.LobbyService;
 import com.copyleft.GodsChoice.feature.lobby.dto.LobbyRequest;
 import com.copyleft.GodsChoice.feature.nickname.NicknameService;
@@ -24,6 +25,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
 
     private final NicknameService nicknameService;
     private final LobbyService lobbyService;
+    private final GameService gameService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -64,6 +66,15 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
 
                 case "LEAVE_ROOM":
                     lobbyService.leaveRoom(session.getId());
+                    break;
+
+                case "SELECT_CARD":
+                    if (request.getPayload() != null && request.getPayload().has("card")) {
+                        String card = request.getPayload().get("card").asText();
+                        gameService.selectCard(session.getId(), card);
+                    } else {
+                        log.warn("SELECT_CARD 요청 오류: payload가 없거나 card 필드 누락. session={}", session.getId());
+                    }
                     break;
 
                 default:
