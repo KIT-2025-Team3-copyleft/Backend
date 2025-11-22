@@ -47,6 +47,27 @@ public class GameResponseSender {
         broadcastToRoom(room, response);
     }
 
+    public void broadcastRoundStart(Room room) {
+        GameResponse response = createResponse(
+                SocketEvent.ROUND_START,
+                room,
+                "라운드가 시작되었습니다.",
+                null
+        );
+        broadcastToRoom(room, response);
+    }
+
+    public void sendCards(String sessionId, String slotType, java.util.List<String> cards) {
+        GameResponse response = GameResponse.builder()
+                .event(SocketEvent.RECEIVE_CARDS.name())
+                .slotType(slotType)
+                .cards(cards)
+                .message("카드를 선택해주세요.")
+                .build();
+
+        webSocketSender.sendEventToSession(sessionId, response);
+    }
+
     public void sendError(String sessionId, ErrorCode errorCode) {
         GameResponse response = createResponse(
                 SocketEvent.ERROR_MESSAGE,

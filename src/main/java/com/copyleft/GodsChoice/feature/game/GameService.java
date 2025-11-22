@@ -1,7 +1,9 @@
 package com.copyleft.GodsChoice.feature.game;
 
+import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
+import com.copyleft.GodsChoice.domain.type.WordData;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
@@ -11,6 +13,9 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -125,6 +130,9 @@ public class GameService {
                 gameResponseSender.broadcastLoadGameScene(room);
 
                 log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
+
+                startRound(roomId);
+                
             } catch (Exception e) {
                 log.error("게임 시작 처리 중 저장/전송 오류 (롤백 시도): room={}", roomId, e);
 
@@ -133,6 +141,43 @@ public class GameService {
                 roomRepository.addWaitingRoom(roomId);
                 gameResponseSender.broadcastGameStartCancelled(room);
             }
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    public void startRound(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            List<String> slots = new ArrayList<>(List.of("SUBJECT", "TARGET", "HOW", "ACTION"));
+            Collections.shuffle(slots);
+
+            List<Player> players = room.getPlayers();
+            for (int i = 0; i < players.size(); i++) {
+                Player player = players.get(i);
+                String assignedSlot = slots.get(i % slots.size());
+
+                player.setSlot(assignedSlot);
+                player.setSelectedCard(null);
+
+                List<String> cards = WordData.getRandomCards(assignedSlot, 5);
+
+                gameResponseSender.sendCards(player.getSessionId(), assignedSlot, cards);
+            }
+
+            room.setCurrentPhase("CARD_SELECT");
+
+            roomRepository.saveRoom(room);
+            gameResponseSender.broadcastRoundStart(room);
+
+            log.info("라운드 시작 및 카드 배분 완료: room={}", roomId);
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
