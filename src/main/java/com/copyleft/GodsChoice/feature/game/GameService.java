@@ -207,7 +207,11 @@ public class GameService {
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            log.error("타임아웃 처리 락 획득 실패: {}", roomId);
+            log.warn("타임아웃 처리 락 획득 실패 (1초 후 재시도): {}", roomId);
+            taskScheduler.schedule(
+                    () -> processCardTimeout(roomId),
+                    Instant.now().plusSeconds(1)
+            );
             return;
         }
 
@@ -311,7 +315,11 @@ public class GameService {
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            log.error("심판 처리 락 획득 실패 (재시도 필요): {}", roomId);
+            log.warn("심판 처리 락 획득 실패 (1초 후 재시도): {}", roomId);
+            taskScheduler.schedule(
+                    () -> judgeRoundInternal(roomId),
+                    Instant.now().plusSeconds(1)
+            );
             return;
         }
 
