@@ -46,7 +46,13 @@ class GameServiceTest {
                 .hostSessionId(sessionId)
                 .status(RoomStatus.WAITING)
                 .build();
-        for(int i=0; i<4; i++) room.addPlayer(null);
+        for(int i=0; i<4; i++) {
+            room.addPlayer(com.copyleft.GodsChoice.domain.Player.builder()
+                    .sessionId(i == 0 ? sessionId : "player-" + i)
+                    .nickname("Player" + i)
+                    .isHost(i == 0)
+                    .build());
+        }
 
         when(roomRepository.getRoomIdBySessionId(sessionId)).thenReturn(roomId);
         when(redisLockRepository.lock(roomId)).thenReturn(lockToken);
