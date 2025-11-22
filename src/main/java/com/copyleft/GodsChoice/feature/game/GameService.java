@@ -23,6 +23,8 @@ public class GameService {
     private final GameResponseSender gameResponseSender;
     private final TaskScheduler taskScheduler;
 
+    private static final int GAME_START_DELAY_SECONDS = 3;
+
 
     public void tryStartGame(String sessionId) {
 
@@ -35,7 +37,7 @@ public class GameService {
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            gameResponseSender.sendError(sessionId, ErrorCode.UNKNOWN_ERROR);
+            gameResponseSender.sendError(sessionId, ErrorCode.GAME_START_FAILED);
             return;
         }
 
@@ -70,7 +72,10 @@ public class GameService {
 
             gameResponseSender.broadcastGameStartTimer(room);
 
-            taskScheduler.schedule(() -> processGameStart(roomId), Instant.now().plusSeconds(3));
+            taskScheduler.schedule(
+                    () -> processGameStart(roomId),
+                    Instant.now().plusSeconds(GAME_START_DELAY_SECONDS)
+            );
 
             log.info("게임 시작 카운트다운 시작: room={}", roomId);
 
@@ -83,7 +88,7 @@ public class GameService {
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            log.error("게임 시작 처리 락 획득 실패 (재시도 필요): {}", roomId);
+            log.error("게임 시작 처리 락 획득 실패 (이번 처리는 건너뜀): {}", roomId);
             return;
         }
 
@@ -104,6 +109,7 @@ public class GameService {
                 log.warn("게임 시작 실패 (인원 부족): {}", roomId);
                 room.setStatus(RoomStatus.WAITING);
                 roomRepository.saveRoom(room);
+                roomRepository.addWaitingRoom(roomId);
                 gameResponseSender.broadcastGameStartCancelled(room);
                 return;
             }
@@ -120,6 +126,16 @@ public class GameService {
                 log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
             } catch (Exception e) {
                 log.error("게임 시작 처리 중 저장/전송 오류: room={}", roomId, e);
+
+                try {
+                    room.setStatus(RoomStatus.WAITING);
+                    roomRepository.saveRoom(room);
+                    roomRepository.addWaitingRoom(roomId);
+
+                    gameResponseSender.broadcastGameStartCancelled(room);
+                } catch (Exception rollbackEx) {
+                    log.error("롤백 중 2차 오류 발생 (심각): {}", roomId, rollbackEx);
+                }
             }
 
         } finally {
