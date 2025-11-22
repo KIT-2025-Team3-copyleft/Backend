@@ -133,7 +133,8 @@ public class LobbyService {
     public void leaveRoom(String sessionId) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) {
-            log.warn("방 나가기 실패: 해당 세션({})은 방에 속해있지 않습니다.", sessionId);
+            log.info("이미 방에 없는 유저의 퇴장 요청: {}", sessionId);
+            responseSender.sendLeaveSuccess(sessionId);
             return;
         }
 
