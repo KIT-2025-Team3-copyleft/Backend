@@ -2,6 +2,7 @@ package com.copyleft.GodsChoice.infra.persistence;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
@@ -13,7 +14,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RedisLockRepository {
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
 
     private static final String UNLOCK_SCRIPT =
             "if redis.call('get', KEYS[1]) == ARGV[1] then " +
@@ -27,7 +28,7 @@ public class RedisLockRepository {
      * return: 락 획득 성공 시 '생성된 토큰(UUID)', 실패 시 null
      */
     public String lock(String key) {
-        String token = UUID.randomUUID().toString(); // 나만의 식별자 생성
+        String token = UUID.randomUUID().toString();
 
         Boolean success = redisTemplate
                 .opsForValue()

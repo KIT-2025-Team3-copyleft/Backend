@@ -2,20 +2,20 @@ package com.copyleft.GodsChoice.infra.persistence;
 
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.global.constant.RedisKey;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Repository
 @RequiredArgsConstructor
 public class RoomRepository {
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper; // Room 객체 변환용
 
     private static final long ROOM_TTL_HOURS = 1L;
@@ -23,30 +23,35 @@ public class RoomRepository {
     public void saveRoom(Room room) {
         String key = RedisKey.ROOM.makeKey(room.getRoomId());
 
-        redisTemplate.opsForValue().set(key, room);
-        redisTemplate.expire(key, ROOM_TTL_HOURS, TimeUnit.HOURS);
+        try {
+            String roomJson = objectMapper.writeValueAsString(room);
+            redisTemplate.opsForValue().set(key, roomJson, ROOM_TTL_HOURS, TimeUnit.HOURS);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Room Save Error", e);
+        }
     }
 
     public Optional<Room> findRoomById(String roomId) {
         String key = RedisKey.ROOM.makeKey(roomId);
+        String roomJson = redisTemplate.opsForValue().get(key);
 
-        Object obj = redisTemplate.opsForValue().get(key);
-        if (obj instanceof Room) {
-            return Optional.of((Room) obj);
+        if (roomJson == null) return Optional.empty();
+
+        try {
+            Room room = objectMapper.readValue(roomJson, Room.class);
+            return Optional.of(room);
+        } catch (JsonProcessingException e) {
+            return Optional.empty();
         }
-        return Optional.ofNullable(objectMapper.convertValue(obj, Room.class));
     }
 
     public String findRoomIdByCode(String roomCode) {
         String key = RedisKey.ROOM_CODE.makeKey(roomCode);
-
-        Object result = redisTemplate.opsForValue().get(key);
-        return result != null ? result.toString() : null;
+        return redisTemplate.opsForValue().get(key);
     }
 
     public void saveRoomCodeMapping(String roomCode, String roomId) {
         String key = RedisKey.ROOM_CODE.makeKey(roomCode);
-
         redisTemplate.opsForValue().set(key, roomId, 1, TimeUnit.HOURS);
     }
 
@@ -59,8 +64,7 @@ public class RoomRepository {
     }
 
     public String getRandomWaitingRoomId() {
-        Object roomId = redisTemplate.opsForSet().randomMember(RedisKey.WAITING_ROOMS.getKey());
-        return roomId != null ? roomId.toString() : null;
+        return redisTemplate.opsForSet().randomMember(RedisKey.WAITING_ROOMS.getKey());
     }
 
     public void deleteRoom(String roomId, String roomCode) {
@@ -78,8 +82,7 @@ public class RoomRepository {
     }
 
     public String getRoomIdBySessionId(String sessionId) {
-        Object result = redisTemplate.opsForValue().get(RedisKey.SESSION_ROOM.makeKey(sessionId));
-        return result != null ? result.toString() : null;
+        return redisTemplate.opsForValue().get(RedisKey.SESSION_ROOM.makeKey(sessionId));
     }
 
     public void deleteSessionRoomMapping(String sessionId) {
