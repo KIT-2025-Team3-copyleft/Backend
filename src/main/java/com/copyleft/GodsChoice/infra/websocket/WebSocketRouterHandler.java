@@ -47,6 +47,10 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     nicknameService.setNickname(session.getId(), nicknameDto.getNickname());
                     break;
 
+                case "START_GAME":
+                    gameService.tryStartGame(session.getId());
+                    break;
+
                 case "CREATE_ROOM":
                     lobbyService.createRoom(session.getId());
                     break;
