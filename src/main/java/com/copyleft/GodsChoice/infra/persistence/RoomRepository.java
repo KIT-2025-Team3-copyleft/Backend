@@ -5,12 +5,10 @@ import com.copyleft.GodsChoice.global.constant.RedisKey;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Repository
@@ -29,7 +27,7 @@ public class RoomRepository {
             String roomJson = objectMapper.writeValueAsString(room);
             redisTemplate.opsForValue().set(key, roomJson, ROOM_TTL_HOURS, TimeUnit.HOURS);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Room Save Error", e);
         }
     }
 
