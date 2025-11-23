@@ -26,8 +26,10 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - GROQ_API_KEY=${GROQ_API_KEY}
     depends_on:
-      - redis
-      - mysql
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_healthy
     networks:
       - app-network
 
@@ -43,8 +45,10 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - GROQ_API_KEY=${GROQ_API_KEY}
     depends_on:
-      - redis
-      - mysql
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_healthy
     networks:
       - app-network
 
@@ -72,6 +76,11 @@ services:
       - mysql-data:/var/lib/mysql
     networks:
       - app-network
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p$MYSQL_ROOT_PASSWORD || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   app-network:
