@@ -2,6 +2,7 @@ package com.copyleft.GodsChoice.infra.persistence;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.Duration;
@@ -10,7 +11,7 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class NicknameRepository {
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
 
     private static final String KEY_ACTIVE_NICKNAMES = "active_nicknames";
     private static final String KEY_SESSION_PREFIX = "session:";
