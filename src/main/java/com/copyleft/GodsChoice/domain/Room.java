@@ -120,4 +120,26 @@ public class Room {
         this.proposalVotes.clear();
         this.trialVotes.clear();
     }
+
+    public void resetForNewGame() {
+        this.status = RoomStatus.WAITING;
+        this.currentHp = 1000;
+        this.currentRound = 1;
+        this.currentPhase = null;
+
+        this.godPersonality = null;
+        this.isVotingDisabled = false;
+
+        this.proposalVotes.clear();
+        this.trialVotes.clear();
+
+        if (this.players != null) {
+            for (Player p : this.players) {
+                p.setRole(null);
+                p.setSlot(null);
+                p.setSelectedCard(null);
+                p.setVoteTarget(null);
+            }
+        }
+    }
 }

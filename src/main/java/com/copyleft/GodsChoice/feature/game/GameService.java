@@ -3,6 +3,7 @@ package com.copyleft.GodsChoice.feature.game;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
+import com.copyleft.GodsChoice.feature.lobby.LobbyResponseSender;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.external.GroqApiClient;
 import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
@@ -25,6 +26,7 @@ public class GameService {
     private final RoomRepository roomRepository;
     private final RedisLockRepository redisLockRepository;
     private final GameResponseSender gameResponseSender;
+    private final LobbyResponseSender lobbyResponseSender;
     private final TaskScheduler taskScheduler;
     private final GroqApiClient groqApiClient;
     private final ObjectMapper objectMapper;
@@ -659,18 +661,72 @@ public class GameService {
                 winnerRole = PlayerRole.TRAITOR.name();
             }
 
+            room.setStatus(RoomStatus.GAME_OVER);
+            roomRepository.saveRoom(room);
+
             log.info("게임 종료 판정: room={}, winner={}", roomId, winnerRole);
 
             gameResponseSender.broadcastGameOver(room, winnerRole);
 
             gameLogService.saveGameLogAsync(room, winnerRole);
 
-            roomRepository.removeWaitingRoom(roomId);
-
             taskScheduler.schedule(() -> {
+                cleanupGameOverRoom(roomId);
+            }, Instant.now().plusSeconds(60));
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    public void backToRoom(String sessionId) {
+        String roomId = roomRepository.getRoomIdBySessionId(sessionId);
+        if (roomId == null) return;
+
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getStatus() != RoomStatus.GAME_OVER && room.getStatus() != RoomStatus.WAITING) {
+                return;
+            }
+
+            if (room.getStatus() == RoomStatus.GAME_OVER) {
+                room.resetForNewGame();
+                roomRepository.addWaitingRoom(roomId);
+                roomRepository.saveRoom(room);
+
+                log.info("방 초기화 및 대기 상태 전환: room={}", roomId);
+            }
+
+            lobbyResponseSender.broadcastLobbyUpdate(room);
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    public void cleanupGameOverRoom(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) {
+            return;
+        }
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getStatus() == RoomStatus.GAME_OVER) {
                 roomRepository.deleteRoom(roomId, room.getRoomCode());
-                log.info("방 데이터 정리 완료: {}", roomId);
-            }, Instant.now().plusSeconds(10));
+                log.info("타임아웃된 방 강제 청소 완료: {}", roomId);
+            } else {
+                log.info("청소 취소 (이미 재시작됨): status={}", room.getStatus());
+            }
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);

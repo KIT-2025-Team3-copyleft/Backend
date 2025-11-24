@@ -96,6 +96,10 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     }
                     break;
 
+                case "BACK_TO_ROOM":
+                    gameService.backToRoom(session.getId());
+                    break;
+
                 default:
                     log.warn("알 수 없는 Action입니다: {}", request.getAction());
             }
