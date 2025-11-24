@@ -32,7 +32,7 @@ public class RedisLockRepository {
 
         Boolean success = redisTemplate
                 .opsForValue()
-                .setIfAbsent("lock:" + key, token, Duration.ofSeconds(3));
+                .setIfAbsent("lock:" + key, token, Duration.ofSeconds(30));
 
         return Boolean.TRUE.equals(success) ? token : null;
     }
