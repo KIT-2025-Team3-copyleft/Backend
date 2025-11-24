@@ -312,14 +312,13 @@ public class GameService {
     }
 
     private void judgeRoundInternal(String roomId) {
+        String sentence = null;
+        String personality = null;
 
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
             log.warn("심판 처리 락 획득 실패 (1초 후 재시도): {}", roomId);
-            taskScheduler.schedule(
-                    () -> judgeRoundInternal(roomId),
-                    Instant.now().plusSeconds(1)
-            );
+            taskScheduler.schedule(() -> judgeRoundInternal(roomId), Instant.now().plusSeconds(1));
             return;
         }
 
@@ -329,32 +328,72 @@ public class GameService {
             Room room = roomOpt.get();
 
             if (room.getCurrentPhase() == GamePhase.JUDGING) return;
+
             room.setCurrentPhase(GamePhase.JUDGING);
             roomRepository.saveRoom(room);
 
-            String sentence = constructSentence(room);
-            String personality = room.getGodPersonality();
+            sentence = constructSentence(room);
+            personality = room.getGodPersonality();
             if (personality == null) personality = "변덕스러운";
 
-            log.info("AI 심판 시작 (비동기): room={}, 문장='{}'", roomId, sentence);
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
 
-            int score = 0;
-            String reason = "신이 침묵합니다.";
-            String jsonResult = null;
+
+        log.info("AI 심판 시작 (비동기, Lock 해제됨): room={}, 문장='{}'", roomId, sentence);
+
+        int score = 0;
+        String reason = "신이 침묵합니다.";
+        String jsonResult = null;
+
+        try {
+            jsonResult = groqApiClient.judgeSentence(sentence, personality);
+        } catch (Exception e) {
+            log.error("AI API 호출 중 예외 발생 (기본값 적용): room={}", roomId, e);
+        }
+
+        if (jsonResult != null) {
             try {
-                jsonResult = groqApiClient.judgeSentence(sentence, personality);
+                JsonNode root = objectMapper.readTree(jsonResult);
+                score = root.path("score").asInt();
+                reason = root.path("reason").asText();
             } catch (Exception e) {
-                log.error("AI API 호출 중 예외 발생 (기본값 적용): room={}", roomId, e);
+                log.error("AI 응답 파싱 실패 (기본값 적용): json={}", jsonResult, e);
             }
+        }
 
-            if (jsonResult != null) {
-                try {
-                    JsonNode root = objectMapper.readTree(jsonResult);
-                    score = root.path("score").asInt();
-                    reason = root.path("reason").asText();
-                } catch (Exception e) {
-                    log.error("AI 응답 파싱 실패 (기본값 적용): json={}", jsonResult, e);
-                }
+
+        applyJudgmentResult(roomId, score, reason, sentence);
+    }
+
+    private void applyJudgmentResult(String roomId, int score, String reason, String sentence) {
+
+        String lockToken = redisLockRepository.lock(roomId);
+
+        if (lockToken == null) {
+            log.warn("심판 결과 반영 락 획득 실패 (0.5초 후 재시도): {}", roomId);
+            final int finalScore = score;
+            final String finalReason = reason;
+            final String finalSentence = sentence;
+            taskScheduler.schedule(
+                    () -> applyJudgmentResult(roomId, finalScore, finalReason, finalSentence),
+                    Instant.now().plusMillis(500)
+            );
+            return;
+        }
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) {
+                log.warn("심판 결과 반영 중 방이 사라짐: {}", roomId);
+                return;
+            }
+            Room room = roomOpt.get();
+
+            if (room.getStatus() == RoomStatus.GAME_OVER) {
+                log.info("게임이 이미 종료되어 심판 결과 무시: {}", roomId);
+                return;
             }
 
             int currentHp = room.getCurrentHp();
@@ -363,7 +402,7 @@ public class GameService {
             roomRepository.saveRoom(room);
             gameResponseSender.broadcastRoundResult(room, score, reason, sentence);
 
-            log.info("심판 완료: score={}", score);
+            log.info("심판 완료 및 반영: score={}, hp={}", score, room.getCurrentHp());
 
             taskScheduler.schedule(
                     () -> startVoteProposal(roomId),
@@ -474,7 +513,7 @@ public class GameService {
                 gameResponseSender.broadcastVoteProposalFailed(room);
                 taskScheduler.schedule(
                         () -> startNextRound(roomId),
-                        Instant.now().plusSeconds(3) // 3초 뒤 이동
+                        Instant.now().plusSeconds(3)
                 );
                 log.info("투표 부결! 다음 라운드로 넘어갑니다.");
             }
