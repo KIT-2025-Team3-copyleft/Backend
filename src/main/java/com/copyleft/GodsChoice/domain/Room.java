@@ -11,10 +11,8 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.jackson.Jacksonized;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
 @Setter
@@ -52,6 +50,12 @@ public class Room {
     @Builder.Default
     private long createdAt = System.currentTimeMillis(); // 생성 시각 (Timestamp)
 
+    @Builder.Default
+    private Map<String, Boolean> proposalVotes = new ConcurrentHashMap<>();
+
+    @Builder.Default
+    private Map<String, String> trialVotes = new ConcurrentHashMap<>();
+
     public void addPlayer(Player player) {
         if (this.players == null) {
             this.players = new ArrayList<>();
@@ -72,7 +76,7 @@ public class Room {
                 .roomCode(roomCode)
                 .roomTitle(roomTitle)
                 .hostSessionId(hostSessionId)
-                .status(RoomStatus.WAITING) // [Enum 사용 확인]
+                .status(RoomStatus.WAITING)
                 .currentHp(1000)
                 .currentRound(1)
                 .isVotingDisabled(false)
@@ -110,6 +114,33 @@ public class Room {
 
         for (Player player : this.players) {
             player.setRole(PlayerRole.CITIZEN.name());
+        }
+    }
+
+    public void clearVotes() {
+        this.proposalVotes.clear();
+        this.trialVotes.clear();
+    }
+
+    public void resetForNewGame() {
+        this.status = RoomStatus.WAITING;
+        this.currentHp = 1000;
+        this.currentRound = 1;
+        this.currentPhase = null;
+
+        this.godPersonality = null;
+        this.isVotingDisabled = false;
+
+        this.proposalVotes.clear();
+        this.trialVotes.clear();
+
+        if (this.players != null) {
+            for (Player p : this.players) {
+                p.setRole(null);
+                p.setSlot(null);
+                p.setSelectedCard(null);
+                p.setVoteTarget(null);
+            }
         }
     }
 }
