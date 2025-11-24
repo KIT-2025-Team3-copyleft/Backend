@@ -587,7 +587,10 @@ public class GameService {
             if (roomOpt.isEmpty()) return;
             Room room = roomOpt.get();
 
-            if (room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return;
+            if (room.getCurrentPhase() != GamePhase.TRIAL_VOTE) {
+                log.warn("이미 처리된 심문 결과입니다. room={}", roomId);
+                return;
+            }
 
             String targetSessionId = calculateMostVoted(room);
 
@@ -605,7 +608,7 @@ public class GameService {
                     targetNickname = target.getNickname();
                     targetRole = target.getRole(); // CITIZEN or TRAITOR
 
-                    if (com.copyleft.GodsChoice.domain.type.PlayerRole.TRAITOR.name().equals(targetRole)) {
+                    if (PlayerRole.TRAITOR.name().equals(targetRole)) {
                         success = true;
                         room.setCurrentHp(room.getCurrentHp() + 100);
                         room.setVotingDisabled(true);
@@ -618,6 +621,8 @@ public class GameService {
             } else {
                 targetNickname = "기권";
             }
+
+            room.setCurrentPhase(GamePhase.TRIAL_RESULT);
 
             roomRepository.saveRoom(room);
             gameResponseSender.broadcastTrialResult(room, success, targetNickname, targetRole);
