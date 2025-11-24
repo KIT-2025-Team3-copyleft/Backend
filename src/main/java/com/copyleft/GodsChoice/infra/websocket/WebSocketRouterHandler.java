@@ -6,6 +6,7 @@ import com.copyleft.GodsChoice.feature.lobby.dto.LobbyRequest;
 import com.copyleft.GodsChoice.feature.nickname.NicknameService;
 import com.copyleft.GodsChoice.feature.nickname.dto.SetNicknameRequest;
 import com.copyleft.GodsChoice.infra.websocket.dto.WebSocketRequest;
+import com.copyleft.GodsChoice.feature.game.dto.VoteRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,6 +79,20 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                         gameService.selectCard(session.getId(), card);
                     } else {
                         log.warn("SELECT_CARD 요청 오류: payload가 없거나 card 필드 누락. session={}", session.getId());
+                    }
+                    break;
+
+                case "PROPOSE_VOTE":
+                    if (request.getPayload().has("agree")) {
+                        boolean agree = request.getPayload().get("agree").asBoolean();
+                        gameService.voteProposal(session.getId(), agree);
+                    }
+                    break;
+
+                case "CAST_VOTE":
+                    if (request.getPayload().has("targetSessionId")) {
+                        String targetId = request.getPayload().get("targetSessionId").asText();
+                        gameService.castVote(session.getId(), targetId);
                     }
                     break;
 

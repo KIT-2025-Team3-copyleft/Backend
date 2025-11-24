@@ -2,10 +2,7 @@ package com.copyleft.GodsChoice.feature.game;
 
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
-import com.copyleft.GodsChoice.domain.type.GamePhase;
-import com.copyleft.GodsChoice.domain.type.RoomStatus;
-import com.copyleft.GodsChoice.domain.type.SlotType;
-import com.copyleft.GodsChoice.domain.type.WordData;
+import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.external.GroqApiClient;
 import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
@@ -18,10 +15,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -34,9 +28,13 @@ public class GameService {
     private final TaskScheduler taskScheduler;
     private final GroqApiClient groqApiClient;
     private final ObjectMapper objectMapper;
+    private final GameLogService gameLogService;
+
 
     private static final int GAME_START_DELAY_SECONDS = 3;
     private static final int CARD_SELECT_DURATION_SECONDS = 120;
+    private static final int VOTE_PROPOSAL_SECONDS = 15;
+    private static final int TRIAL_DURATION_SECONDS = 60;
 
 
     public void tryStartGame(String sessionId) {
@@ -365,6 +363,10 @@ public class GameService {
 
             log.info("심판 완료: score={}", score);
 
+            taskScheduler.schedule(
+                    () -> startVoteProposal(roomId),
+                    Instant.now().plusSeconds(5)
+            );
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
@@ -382,5 +384,296 @@ public class GameService {
                     .ifPresent(p -> sb.append(p.getSelectedCard()).append(" "));
         }
         return sb.toString().trim();
+    }
+
+    public void startVoteProposal(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            room.setCurrentPhase(GamePhase.VOTE_PROPOSAL);
+            room.clearVotes();
+
+            roomRepository.saveRoom(room);
+
+            gameResponseSender.broadcastVoteProposalStart(room);
+
+            taskScheduler.schedule(
+                    () -> processVoteProposalEnd(roomId),
+                    Instant.now().plusSeconds(VOTE_PROPOSAL_SECONDS)
+            );
+
+            log.info("찬반 투표 시작: room={}", roomId);
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+
+    public void voteProposal(String sessionId, boolean agree) {
+        String roomId = roomRepository.getRoomIdBySessionId(sessionId);
+        if (roomId == null) return;
+
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return;
+
+            room.getProposalVotes().put(sessionId, agree);
+            roomRepository.saveRoom(room);
+
+            log.info("투표 접수: session={}, agree={}", sessionId, agree);
+
+            if (room.getProposalVotes().size() >= room.getPlayers().size()) {
+                log.info("전원 투표 완료! 즉시 집계 진행: room={}", roomId);
+                taskScheduler.schedule(
+                        () -> processVoteProposalEnd(roomId),
+                        Instant.now()
+                );
+            }
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+
+    public void processVoteProposalEnd(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return;
+
+            long agreeCount = room.getProposalVotes().values().stream()
+                    .filter(Boolean::booleanValue)
+                    .count();
+
+            log.info("찬반 투표 집계: room={}, agree={}", roomId, agreeCount);
+
+            if (agreeCount >= 2) {
+                log.info("투표 가결! 이단 심문으로 넘어갑니다.");
+                startTrialInternal(room);
+            } else {
+                gameResponseSender.broadcastVoteProposalFailed(room);
+                taskScheduler.schedule(
+                        () -> startNextRound(roomId),
+                        Instant.now().plusSeconds(3) // 3초 뒤 이동
+                );
+                log.info("투표 부결! 다음 라운드로 넘어갑니다.");
+            }
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+
+    private void startTrialInternal(Room room) {
+
+        int penalty = 50;
+        room.setCurrentHp(room.getCurrentHp() - penalty);
+
+        room.setCurrentPhase(GamePhase.TRIAL_VOTE);
+        room.clearVotes();
+
+        roomRepository.saveRoom(room);
+
+        gameResponseSender.broadcastTrialStart(room);
+
+        taskScheduler.schedule(
+                () -> processTrialEnd(room.getRoomId()),
+                Instant.now().plusSeconds(TRIAL_DURATION_SECONDS)
+        );
+
+        log.info("이단 심문 시작 (HP -{}): room={}", penalty, room.getRoomId());
+    }
+
+    public void castVote(String sessionId, String targetSessionId) {
+        String roomId = roomRepository.getRoomIdBySessionId(sessionId);
+        if (roomId == null) return;
+
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return;
+
+            room.getTrialVotes().put(sessionId, targetSessionId);
+            roomRepository.saveRoom(room);
+
+            log.info("지목 투표: {} -> {}", sessionId, targetSessionId);
+
+            if (room.getTrialVotes().size() >= room.getPlayers().size()) {
+                log.info("전원 지목 완료! 즉시 집계 진행: room={}", roomId);
+                taskScheduler.schedule(
+                        () -> processTrialEnd(roomId),
+                        Instant.now()
+                );
+            }
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+
+    public void processTrialEnd(String roomId) {
+
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return;
+
+            String targetSessionId = calculateMostVoted(room);
+
+            boolean success = false;
+            String targetNickname = "없음";
+            String targetRole = "UNKNOWN";
+
+            if (targetSessionId != null) {
+                Player target = room.getPlayers().stream()
+                        .filter(p -> p.getSessionId().equals(targetSessionId))
+                        .findFirst()
+                        .orElse(null);
+
+                if (target != null) {
+                    targetNickname = target.getNickname();
+                    targetRole = target.getRole(); // CITIZEN or TRAITOR
+
+                    if (com.copyleft.GodsChoice.domain.type.PlayerRole.TRAITOR.name().equals(targetRole)) {
+                        success = true;
+                        room.setCurrentHp(room.getCurrentHp() + 100);
+                        room.setVotingDisabled(true);
+                    }
+                    else {
+                        success = false;
+                        room.setCurrentHp(room.getCurrentHp() - 100);
+                    }
+                }
+            } else {
+                targetNickname = "기권";
+            }
+
+            roomRepository.saveRoom(room);
+            gameResponseSender.broadcastTrialResult(room, success, targetNickname, targetRole);
+
+            log.info("심문 결과: target={}, success={}, hp={}", targetNickname, success, room.getCurrentHp());
+
+            taskScheduler.schedule(
+                    () -> startNextRound(roomId),
+                    Instant.now().plusSeconds(5)
+            );
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    private String calculateMostVoted(Room room) {
+        Map<String, Integer> voteCounts = new java.util.HashMap<>();
+        for (String target : room.getTrialVotes().values()) {
+            voteCounts.put(target, voteCounts.getOrDefault(target, 0) + 1);
+        }
+
+        return voteCounts.entrySet().stream()
+                .max(java.util.Map.Entry.comparingByValue())
+                .map(java.util.Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    public void startNextRound(String roomId) {
+
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getCurrentRound() >= 4) {
+                processGameOver(roomId);
+                log.info("4라운드 종료! 게임 오버 처리 예정: {}", roomId);
+                return;
+            }
+
+            room.setCurrentRound(room.getCurrentRound() + 1);
+            roomRepository.saveRoom(room);
+
+            gameResponseSender.broadcastNextRound(room);
+
+            log.info("다음 라운드 진입: {}라운드", room.getCurrentRound());
+
+            taskScheduler.schedule(
+                    () -> startRound(roomId),
+                    Instant.now().plusSeconds(3)
+            );
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    public void processGameOver(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            String winnerRole;
+
+            if (room.isVotingDisabled()) {
+                winnerRole = PlayerRole.CITIZEN.name();
+            }
+            else if (room.getCurrentHp() <= 0) {
+                winnerRole = PlayerRole.TRAITOR.name();
+            }
+            else {
+                winnerRole = PlayerRole.TRAITOR.name();
+            }
+
+            log.info("게임 종료 판정: room={}, winner={}", roomId, winnerRole);
+
+            gameResponseSender.broadcastGameOver(room, winnerRole);
+
+            gameLogService.saveGameLogAsync(room, winnerRole);
+
+            roomRepository.removeWaitingRoom(roomId);
+
+            taskScheduler.schedule(() -> {
+                roomRepository.deleteRoom(roomId, room.getRoomCode());
+                log.info("방 데이터 정리 완료: {}", roomId);
+            }, Instant.now().plusSeconds(10));
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
     }
 }
