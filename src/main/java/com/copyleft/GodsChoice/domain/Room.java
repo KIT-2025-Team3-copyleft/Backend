@@ -12,6 +12,7 @@ import lombok.ToString;
 import lombok.extern.jackson.Jacksonized;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
 @Setter
@@ -50,10 +51,10 @@ public class Room {
     private long createdAt = System.currentTimeMillis(); // 생성 시각 (Timestamp)
 
     @Builder.Default
-    private Map<String, Boolean> proposalVotes = new HashMap<>();
+    private Map<String, Boolean> proposalVotes = new ConcurrentHashMap<>();
 
     @Builder.Default
-    private Map<String, String> trialVotes = new HashMap<>();
+    private Map<String, String> trialVotes = new ConcurrentHashMap<>();
 
     public void addPlayer(Player player) {
         if (this.players == null) {

@@ -609,6 +609,8 @@ public class GameService {
 
     public void startNextRound(String roomId) {
 
+        boolean isGameOver = false;
+
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) return;
 
@@ -618,25 +620,28 @@ public class GameService {
             Room room = roomOpt.get();
 
             if (room.getCurrentRound() >= 4) {
-                processGameOver(roomId);
+                isGameOver = true;
                 log.info("4라운드 종료! 게임 오버 처리 예정: {}", roomId);
-                return;
+            } else {
+                room.setCurrentRound(room.getCurrentRound() + 1);
+                roomRepository.saveRoom(room);
+
+                gameResponseSender.broadcastNextRound(room);
+
+                log.info("다음 라운드 진입: {}라운드", room.getCurrentRound());
+
+                taskScheduler.schedule(
+                        () -> startRound(roomId),
+                        Instant.now().plusSeconds(3)
+                );
             }
-
-            room.setCurrentRound(room.getCurrentRound() + 1);
-            roomRepository.saveRoom(room);
-
-            gameResponseSender.broadcastNextRound(room);
-
-            log.info("다음 라운드 진입: {}라운드", room.getCurrentRound());
-
-            taskScheduler.schedule(
-                    () -> startRound(roomId),
-                    Instant.now().plusSeconds(3)
-            );
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
+        }
+
+        if (isGameOver) {
+            processGameOver(roomId);
         }
     }
 
