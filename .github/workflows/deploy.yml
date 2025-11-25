@@ -22,7 +22,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Spring Boot 빌드
-        run: ./gradlew clean build -x test
+        run: ./gradlew clean bootJar -x test
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -42,7 +42,7 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ secrets.DOCKER_USERNAME }}/gods-choice-backend:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/godschoice:latest
 
       - name: 서버로 설정 파일 전송
         uses: appleboy/scp-action@master
