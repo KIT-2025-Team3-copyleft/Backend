@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   nginx:
-    image: nginx:latest
+    image: nginx:1.25
     ports:
       - "80:80"
       - "443:443"
@@ -12,6 +12,7 @@ services:
       - spring-boot-1
     networks:
       - app-network
+    restart: unless-stopped
 
   spring-boot-1:
     image: gwiyomi/godschoice:latest
@@ -25,14 +26,16 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
   redis:
-    image: redis:latest
+    image: redis:7.2
     container_name: redis
     volumes:
       - redis-data:/data
     networks:
       - app-network
+    restart: unless-stopped
 
   mysql:
     image: mysql:8.0
@@ -47,10 +50,11 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} || exit 1" ]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
 networks:
   app-network:
