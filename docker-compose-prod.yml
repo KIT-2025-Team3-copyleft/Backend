@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - spring-boot-1
+    networks:
+      - app-network
+
+  spring-boot-1:
+    image: gwiyomi/godschoice:latest
+    container_name: spring-boot-1
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  mysql-data:
