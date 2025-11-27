@@ -3,7 +3,9 @@ package com.copyleft.GodsChoice.feature.lobby;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
+import com.copyleft.GodsChoice.domain.type.PlayerColor;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
+import com.copyleft.GodsChoice.feature.lobby.dto.LobbyPayloads;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.global.util.RandomUtil;
 import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
@@ -13,7 +15,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,6 +43,7 @@ public class LobbyService {
         String roomTitle = nickname + "님의 방";
 
         Player host = Player.createHost(sessionId, nickname);
+        host.setColor(PlayerColor.RED);
 
         Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
 
@@ -65,15 +70,36 @@ public class LobbyService {
 
     public void quickJoin(String sessionId) {
 
-        String roomId = roomRepository.getRandomWaitingRoomId();
+        List<Room> waitingRooms = roomRepository.findAllWaitingRooms();
 
-        if (roomId == null) {
-            log.info("빠른 입장: 빈 방 없음 -> 새 방 생성");
+        Optional<Room> bestRoom = waitingRooms.stream()
+                .filter(r -> r.getStatus() == RoomStatus.WAITING)
+                .filter(r -> r.getPlayers().size() < Room.MAX_PLAYER_COUNT).min((r1, r2) -> Integer.compare(r2.getPlayers().size(), r1.getPlayers().size()));
+
+        if (bestRoom.isEmpty()) {
+            log.info("빠른 입장: 적절한 방 없음 -> 새 방 생성");
             createRoom(sessionId);
             return;
         }
 
-        joinRoomInternal(sessionId, roomId);
+        joinRoomInternal(sessionId, bestRoom.get().getRoomId());
+    }
+
+    public void getRoomList(String sessionId) {
+        List<Room> waitingRooms = roomRepository.findAllWaitingRooms();
+
+        List<LobbyPayloads.RoomInfo> roomInfos = waitingRooms.stream()
+                .filter(r -> r.getStatus() == RoomStatus.WAITING)
+                .map(r -> LobbyPayloads.RoomInfo.builder()
+                        .roomId(r.getRoomId())
+                        .roomTitle(r.getRoomTitle())
+                        .currentCount(r.getPlayers().size())
+                        .maxCount(Room.MAX_PLAYER_COUNT)
+                        .isPlaying(false)
+                        .build())
+                .collect(Collectors.toList());
+
+        responseSender.sendRoomList(sessionId, roomInfos);
     }
 
     private void joinRoomInternal(String sessionId, String roomId) {
@@ -105,11 +131,13 @@ public class LobbyService {
             }
 
             String nickname = nicknameRepository.getNicknameBySessionId(sessionId);
+            PlayerColor assignedColor = room.getNextAvailableColor();
             Player newPlayer = Player.builder()
                     .sessionId(sessionId)
                     .nickname(nickname)
                     .isHost(false)
                     .connectionStatus(ConnectionStatus.CONNECTED)
+                    .color(assignedColor)
                     .build();
 
             room.addPlayer(newPlayer);
@@ -129,7 +157,7 @@ public class LobbyService {
             redisLockRepository.unlock(roomId, lockToken);
         }
     }
-
+    
     public void leaveRoom(String sessionId) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) {

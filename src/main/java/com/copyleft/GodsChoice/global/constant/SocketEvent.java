@@ -8,10 +8,14 @@ public enum SocketEvent {
     JOIN_FAILED,
     LOBBY_UPDATE,
     LEAVE_SUCCESS,
+    ROOM_LIST,
 
     GAME_START_TIMER,
     TIMER_CANCELLED,
     LOAD_GAME_SCENE,
+
+    SHOW_ORACLE,     // 신탁 공개 (공통)
+    SHOW_ROLE,       // 내 역할 및 성향 확인 (개인)
 
     ROUND_START,
     RECEIVE_CARDS,

@@ -1,8 +1,6 @@
 package com.copyleft.GodsChoice.domain;
 
-import com.copyleft.GodsChoice.domain.type.GamePhase;
-import com.copyleft.GodsChoice.domain.type.PlayerRole;
-import com.copyleft.GodsChoice.domain.type.RoomStatus;
+import com.copyleft.GodsChoice.domain.type.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -39,7 +37,8 @@ public class Room {
     @Builder.Default
     private int currentRound = 1;
 
-    private String godPersonality; // 이번 판의 신 성향
+    private GodPersonality godPersonality; // 이번 판의 신 성향
+    private Oracle oracle;         // 이번 라운드 신탁
 
     @Builder.Default
     private boolean isVotingDisabled = false; // 배신자 색출 후 투표 잠금 여부
@@ -110,7 +109,7 @@ public class Room {
         if (this.players == null || this.players.isEmpty()) return;
 
         for (Player player : this.players) {
-            player.setRole(PlayerRole.CITIZEN.name());
+            player.setRole(PlayerRole.CITIZEN);
         }
     }
 
@@ -128,6 +127,7 @@ public class Room {
         this.currentRound = 1;
         this.currentPhase = null;
         this.godPersonality = null;
+        this.oracle = null;
         this.isVotingDisabled = false;
 
         this.currentPhaseData.clear();
@@ -140,5 +140,20 @@ public class Room {
                 p.setVoteTarget(null);
             }
         }
+    }
+
+    public PlayerColor getNextAvailableColor() {
+        if (this.players == null) return PlayerColor.RED;
+
+        List<PlayerColor> usedColors = this.players.stream()
+                .map(Player::getColor)
+                .toList();
+
+        for (PlayerColor color : PlayerColor.values()) {
+            if (!usedColors.contains(color)) {
+                return color;
+            }
+        }
+        throw new IllegalStateException("All colors are already assigned");
     }
 }
