@@ -13,6 +13,9 @@ public enum SocketEvent {
     TIMER_CANCELLED,
     LOAD_GAME_SCENE,
 
+    SHOW_ORACLE,     // 신탁 공개 (공통)
+    SHOW_ROLE,       // 내 역할 및 성향 확인 (개인)
+
     ROUND_START,
     RECEIVE_CARDS,
     CARD_SELECTED_CONFIRMED, // 내 선택 확인

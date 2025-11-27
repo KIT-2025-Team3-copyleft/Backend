@@ -40,6 +40,7 @@ public class Room {
     private int currentRound = 1;
 
     private String godPersonality; // 이번 판의 신 성향
+    private String oracle;         // 이번 라운드 신탁
 
     @Builder.Default
     private boolean isVotingDisabled = false; // 배신자 색출 후 투표 잠금 여부
@@ -128,6 +129,7 @@ public class Room {
         this.currentRound = 1;
         this.currentPhase = null;
         this.godPersonality = null;
+        this.oracle = null;
         this.isVotingDisabled = false;
 
         this.currentPhaseData.clear();

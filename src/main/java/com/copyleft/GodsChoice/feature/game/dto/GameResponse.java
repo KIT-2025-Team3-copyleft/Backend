@@ -20,4 +20,8 @@ public class GameResponse {
     private Integer score;
     private String reason;
     private String sentence;
+
+    private String oracle;         // 신탁 (공통)
+    private String godPersonality; // 신의 성향 (배신자 전용)
+    private String role;           // 역할 (개인)
 }
