@@ -154,6 +154,6 @@ public class Room {
                 return color;
             }
         }
-        return PlayerColor.YELLOW;
+        throw new IllegalStateException("All colors are already assigned");
     }
 }
