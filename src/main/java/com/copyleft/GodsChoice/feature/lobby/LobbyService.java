@@ -133,7 +133,7 @@ public class LobbyService {
             }
 
             String nickname = nicknameRepository.getNicknameBySessionId(sessionId);
-            PlayerColor assignedColor = assignColor(room);
+            PlayerColor assignedColor = room.getNextAvailableColor();
             Player newPlayer = Player.builder()
                     .sessionId(sessionId)
                     .nickname(nickname)
@@ -159,20 +159,7 @@ public class LobbyService {
             redisLockRepository.unlock(roomId, lockToken);
         }
     }
-
-    private PlayerColor assignColor(Room room) {
-        List<PlayerColor> usedColors = room.getPlayers().stream()
-                .map(Player::getColor)
-                .toList();
-
-        for (PlayerColor color : PlayerColor.values()) {
-            if (!usedColors.contains(color)) {
-                return color;
-            }
-        }
-        return PlayerColor.YELLOW;
-    }
-
+    
     public void leaveRoom(String sessionId) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) {

@@ -141,4 +141,19 @@ public class Room {
             }
         }
     }
+
+    public PlayerColor getNextAvailableColor() {
+        if (this.players == null) return PlayerColor.RED;
+
+        List<PlayerColor> usedColors = this.players.stream()
+                .map(Player::getColor)
+                .toList();
+
+        for (PlayerColor color : PlayerColor.values()) {
+            if (!usedColors.contains(color)) {
+                return color;
+            }
+        }
+        return PlayerColor.YELLOW;
+    }
 }
