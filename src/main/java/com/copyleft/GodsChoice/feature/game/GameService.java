@@ -190,27 +190,7 @@ public class GameService {
                 room.clearPhaseData();
                 roomRepository.saveRoom(room);
 
-                startRoundInternal(roomId);
-            }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
-        }
-    }
-
-    public void startRoundForce(String roomId) {
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) return;
-
-        try {
-            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
-            if (roomOpt.isEmpty()) return;
-            Room room = roomOpt.get();
-
-            if (room.getStatus() == RoomStatus.PLAYING && room.getCurrentPhase() == null) {
-                log.warn("로딩 타임아웃 발생! 게임 강제 시작: room={}", roomId);
-                room.clearPhaseData();
-                roomRepository.saveRoom(room);
-                startRoundInternal(roomId);
+                startOraclePhase(roomId);
             }
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
@@ -241,6 +221,11 @@ public class GameService {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
             if (roomOpt.isEmpty()) return;
             Room room = roomOpt.get();
+
+            if (room.getCurrentPhase() != null) {
+                log.warn("ORACLE 단계 진입 시점에 이미 다른 phase 진행 중 (중복 호출 무시): room={}, phase={}", roomId, room.getCurrentPhase());
+                return;
+            }
 
             room.setCurrentPhase(GamePhase.ORACLE);
             roomRepository.saveRoom(room);
