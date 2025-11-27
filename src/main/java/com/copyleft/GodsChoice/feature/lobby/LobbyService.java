@@ -3,6 +3,7 @@ package com.copyleft.GodsChoice.feature.lobby;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
+import com.copyleft.GodsChoice.domain.type.PlayerColor;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.global.util.RandomUtil;
@@ -43,7 +44,7 @@ public class LobbyService {
         String roomTitle = nickname + "님의 방";
 
         Player host = Player.createHost(sessionId, nickname);
-        host.setColor(COLORS.get(0));
+        host.setColor(PlayerColor.RED);
 
         Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
 
@@ -110,7 +111,7 @@ public class LobbyService {
             }
 
             String nickname = nicknameRepository.getNicknameBySessionId(sessionId);
-            String assignedColor = assignColor(room);
+            PlayerColor assignedColor = assignColor(room);
             Player newPlayer = Player.builder()
                     .sessionId(sessionId)
                     .nickname(nickname)
@@ -137,17 +138,17 @@ public class LobbyService {
         }
     }
 
-    private String assignColor(Room room) {
-        List<String> usedColors = room.getPlayers().stream()
+    private PlayerColor assignColor(Room room) {
+        List<PlayerColor> usedColors = room.getPlayers().stream()
                 .map(Player::getColor)
                 .collect(Collectors.toList());
 
-        for (String color : COLORS) {
+        for (PlayerColor color : PlayerColor.values()) {
             if (!usedColors.contains(color)) {
                 return color;
             }
         }
-        return "RED";
+        return PlayerColor.YELLOW;
     }
 
     public void leaveRoom(String sessionId) {
