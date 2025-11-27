@@ -73,6 +73,10 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     lobbyService.leaveRoom(session.getId());
                     break;
 
+                case "GAME_READY":
+                    gameService.processGameReady(session.getId());
+                    break;
+
                 case "SELECT_CARD":
                     if (request.getPayload() != null && request.getPayload().has("card")) {
                         String card = request.getPayload().get("card").asText();
