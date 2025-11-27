@@ -474,8 +474,8 @@ public class GameService {
             roomRepository.saveRoom(room);
 
             sentence = constructSentence(room);
-            personality = room.getGodPersonality().getDescription();
-            if (personality == null) personality = "변덕스러운";
+            GodPersonality godPersonality = room.getGodPersonality();
+            personality = (godPersonality != null) ? godPersonality.getDescription() : "변덕스러운";
 
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
