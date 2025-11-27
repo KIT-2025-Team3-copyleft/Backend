@@ -30,8 +30,6 @@ public class LobbyService {
 
     private final LobbyResponseSender responseSender;
 
-    private static final List<String> COLORS = List.of("RED", "BLUE", "GREEN", "YELLOW");
-
 
     public void createRoom(String sessionId) {
         String nickname = nicknameRepository.getNicknameBySessionId(sessionId);

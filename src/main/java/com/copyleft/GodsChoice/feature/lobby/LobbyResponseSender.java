@@ -44,7 +44,7 @@ public class LobbyResponseSender {
                 .build();
 
         WebSocketResponse<LobbyPayloads.RoomList> response = WebSocketResponse.<LobbyPayloads.RoomList>builder()
-                .event("ROOM_LIST") // SocketEvent.ROOM_LIST 추가 필요
+                .event(SocketEvent.ROOM_LIST.name())
                 .data(data)
                 .build();
 
