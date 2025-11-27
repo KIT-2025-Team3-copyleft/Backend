@@ -52,6 +52,10 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     gameService.tryStartGame(session.getId());
                     break;
 
+                case "GET_ROOM_LIST":
+                    lobbyService.getRoomList(session.getId());
+                    break;
+
                 case "CREATE_ROOM":
                     lobbyService.createRoom(session.getId());
                     break;

@@ -3,6 +3,7 @@ package com.copyleft.GodsChoice.feature.lobby;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
+import com.copyleft.GodsChoice.feature.lobby.dto.LobbyPayloads;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.global.constant.GameCode;
 import com.copyleft.GodsChoice.global.constant.SocketEvent;
@@ -10,6 +11,8 @@ import com.copyleft.GodsChoice.infra.websocket.WebSocketSender;
 import com.copyleft.GodsChoice.infra.websocket.dto.WebSocketResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -32,6 +35,19 @@ public class LobbyResponseSender {
                 .message(GameCode.ROOM_CREATE_SUCCESS.getMessage())
                 .data(room)
                 .build();
+        webSocketSender.sendEventToSession(sessionId, response);
+    }
+
+    public void sendRoomList(String sessionId, List<LobbyPayloads.RoomInfo> rooms) {
+        LobbyPayloads.RoomList data = LobbyPayloads.RoomList.builder()
+                .rooms(rooms)
+                .build();
+
+        WebSocketResponse<LobbyPayloads.RoomList> response = WebSocketResponse.<LobbyPayloads.RoomList>builder()
+                .event("ROOM_LIST") // SocketEvent.ROOM_LIST 추가 필요
+                .data(data)
+                .build();
+
         webSocketSender.sendEventToSession(sessionId, response);
     }
 

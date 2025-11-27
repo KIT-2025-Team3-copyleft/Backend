@@ -8,6 +8,7 @@ public enum SocketEvent {
     JOIN_FAILED,
     LOBBY_UPDATE,
     LEAVE_SUCCESS,
+    ROOM_LIST,
 
     GAME_START_TIMER,
     TIMER_CANCELLED,

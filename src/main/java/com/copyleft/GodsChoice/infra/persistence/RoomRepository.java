@@ -8,8 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -65,6 +66,34 @@ public class RoomRepository {
 
     public String getRandomWaitingRoomId() {
         return redisTemplate.opsForSet().randomMember(RedisKey.WAITING_ROOMS.getKey());
+    }
+
+    public List<Room> findAllWaitingRooms() {
+        Set<String> roomIds = redisTemplate.opsForSet().members(RedisKey.WAITING_ROOMS.getKey());
+
+        if (roomIds == null || roomIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> keys = roomIds.stream()
+                .map(RedisKey.ROOM::makeKey)
+                .collect(Collectors.toList());
+
+        List<String> jsonList = redisTemplate.opsForValue().multiGet(keys);
+
+        if (jsonList == null) return Collections.emptyList();
+
+        List<Room> rooms = new ArrayList<>();
+        for (String json : jsonList) {
+            if (json != null) {
+                try {
+                    rooms.add(objectMapper.readValue(json, Room.class));
+                } catch (JsonProcessingException e) {
+                    // 파싱 에러 난 방은 무시
+                }
+            }
+        }
+        return rooms;
     }
 
     public void deleteRoom(String roomId, String roomCode) {
