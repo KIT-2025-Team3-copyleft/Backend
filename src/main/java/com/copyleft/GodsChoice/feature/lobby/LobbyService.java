@@ -13,7 +13,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -25,6 +27,8 @@ public class LobbyService {
     private final RedisLockRepository redisLockRepository;
 
     private final LobbyResponseSender responseSender;
+
+    private static final List<String> COLORS = List.of("RED", "BLUE", "GREEN", "YELLOW");
 
 
     public void createRoom(String sessionId) {
@@ -39,6 +43,7 @@ public class LobbyService {
         String roomTitle = nickname + "님의 방";
 
         Player host = Player.createHost(sessionId, nickname);
+        host.setColor(COLORS.get(0));
 
         Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
 
@@ -105,11 +110,13 @@ public class LobbyService {
             }
 
             String nickname = nicknameRepository.getNicknameBySessionId(sessionId);
+            String assignedColor = assignColor(room);
             Player newPlayer = Player.builder()
                     .sessionId(sessionId)
                     .nickname(nickname)
                     .isHost(false)
                     .connectionStatus(ConnectionStatus.CONNECTED)
+                    .color(assignedColor)
                     .build();
 
             room.addPlayer(newPlayer);
@@ -128,6 +135,19 @@ public class LobbyService {
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
         }
+    }
+
+    private String assignColor(Room room) {
+        List<String> usedColors = room.getPlayers().stream()
+                .map(Player::getColor)
+                .collect(Collectors.toList());
+
+        for (String color : COLORS) {
+            if (!usedColors.contains(color)) {
+                return color;
+            }
+        }
+        return "RED";
     }
 
     public void leaveRoom(String sessionId) {
