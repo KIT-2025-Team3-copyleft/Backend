@@ -141,7 +141,7 @@ public class LobbyService {
     private PlayerColor assignColor(Room room) {
         List<PlayerColor> usedColors = room.getPlayers().stream()
                 .map(Player::getColor)
-                .collect(Collectors.toList());
+                .toList();
 
         for (PlayerColor color : PlayerColor.values()) {
             if (!usedColors.contains(color)) {
