@@ -34,11 +34,13 @@ public class GameService {
 
 
     private static final int GAME_START_DELAY_SECONDS = 3;
+    private static final int LOADING_TIMEOUT_SECONDS = 15;
+    private static final int ORACLE_PHASE_SECONDS = 8;
     private static final int CARD_SEND_DELAY_SECONDS = 3;
     private static final int CARD_SELECT_DURATION_SECONDS = 120;
     private static final int VOTE_PROPOSAL_SECONDS = 15;
     private static final int TRIAL_DURATION_SECONDS = 60;
-    private static final int LOADING_TIMEOUT_SECONDS = 15;
+
 
 
     public void tryStartGame(String sessionId) {
@@ -133,8 +135,9 @@ public class GameService {
 
             try {
                 room.setStatus(RoomStatus.PLAYING);
-                room.assignRoles();
                 room.clearPhaseData();
+
+                assignRolesAndScenario(room);
 
                 roomRepository.saveRoom(room);
                 roomRepository.removeWaitingRoom(roomId);
@@ -143,7 +146,7 @@ public class GameService {
                 log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
 
                 taskScheduler.schedule(
-                        () -> startRoundForce(roomId),
+                        () -> startOraclePhase(roomId),
                         Instant.now().plusSeconds(LOADING_TIMEOUT_SECONDS)
                 );
 
@@ -160,6 +163,7 @@ public class GameService {
             redisLockRepository.unlock(roomId, lockToken);
         }
     }
+
 
     public void processGameReady(String sessionId) {
 
@@ -213,6 +217,58 @@ public class GameService {
         }
     }
 
+    private void assignRolesAndScenario(Room room) {
+        List<Player> players = room.getPlayers();
+        Collections.shuffle(players);
+
+        for (int i = 0; i < players.size(); i++) {
+            players.get(i).setRole(i == 0 ? PlayerRole.TRAITOR : PlayerRole.CITIZEN);
+        }
+
+        Random random = new Random();
+        Oracle[] oracles = Oracle.values();
+        GodPersonality[] personalities = GodPersonality.values();
+
+        room.setOracle(oracles[random.nextInt(oracles.length)]);
+        room.setGodPersonality(personalities[random.nextInt(personalities.length)]);
+    }
+
+    public void startOraclePhase(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            room.setCurrentPhase(GamePhase.ORACLE);
+            roomRepository.saveRoom(room);
+
+            // 신탁 방송
+            gameResponseSender.broadcastOracle(room);
+
+            // 개인 역할 전송
+            for (Player p : room.getPlayers()) {
+                GodPersonality personality = null;
+                if (p.getRole() == PlayerRole.TRAITOR) {
+                    personality = room.getGodPersonality();
+                }
+                gameResponseSender.sendRole(p, personality);
+            }
+
+            log.info("오프닝(신탁) 시작: room={}, oracle={}", roomId, room.getOracle());
+
+            taskScheduler.schedule(
+                    () -> startRound(roomId),
+                    Instant.now().plusSeconds(ORACLE_PHASE_SECONDS)
+            );
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
     public void startRound(String roomId) {
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) return;
@@ -261,6 +317,7 @@ public class GameService {
 
         log.info("라운드 시작 완료: room={}", roomId);
     }
+
 
     public void sendCardsDelayed(String roomId) {
         String lockToken = redisLockRepository.lock(roomId);
@@ -417,7 +474,7 @@ public class GameService {
             roomRepository.saveRoom(room);
 
             sentence = constructSentence(room);
-            personality = room.getGodPersonality();
+            personality = room.getGodPersonality().getDescription();
             if (personality == null) personality = "변덕스러운";
 
         } finally {
@@ -676,10 +733,9 @@ public class GameService {
             }
 
             String targetSessionId = calculateMostVoted(room);
-
             boolean success = false;
             String targetNickname = "없음";
-            String targetRole = "UNKNOWN";
+            PlayerRole targetRole = PlayerRole.CITIZEN;
 
             if (targetSessionId != null) {
                 Player target = room.getPlayers().stream()
@@ -691,7 +747,7 @@ public class GameService {
                     targetNickname = target.getNickname();
                     targetRole = target.getRole(); // CITIZEN or TRAITOR
 
-                    if (PlayerRole.TRAITOR.name().equals(targetRole)) {
+                    if (targetRole == PlayerRole.TRAITOR) {
                         success = true;
                         room.setCurrentHp(room.getCurrentHp() + 100);
                         room.setVotingDisabled(true);
@@ -706,8 +762,8 @@ public class GameService {
             }
 
             room.setCurrentPhase(GamePhase.TRIAL_RESULT);
-
             roomRepository.saveRoom(room);
+
             gameResponseSender.broadcastTrialResult(room, success, targetNickname, targetRole);
 
             log.info("심문 결과: target={}, success={}, hp={}", targetNickname, success, room.getCurrentHp());
@@ -751,15 +807,16 @@ public class GameService {
                 log.info("4라운드 종료! 게임 오버 처리 예정: {}", roomId);
             } else {
                 room.setCurrentRound(room.getCurrentRound() + 1);
+                room.setOracle(Oracle.values()[new Random().nextInt(Oracle.values().length)]);
+
                 roomRepository.saveRoom(room);
 
                 gameResponseSender.broadcastNextRound(room);
-
                 log.info("다음 라운드 진입: {}라운드", room.getCurrentRound());
 
                 taskScheduler.schedule(
-                        () -> startRound(roomId),
-                        Instant.now().plusSeconds(3)
+                        () -> startOraclePhase(roomId),
+                        Instant.now().plusSeconds(ORACLE_PHASE_SECONDS)
                 );
             }
 
@@ -781,16 +838,16 @@ public class GameService {
             if (roomOpt.isEmpty()) return;
             Room room = roomOpt.get();
 
-            String winnerRole;
+            PlayerRole winnerRole;
 
             if (room.isVotingDisabled()) {
-                winnerRole = PlayerRole.CITIZEN.name();
+                winnerRole = PlayerRole.CITIZEN;
             }
             else if (room.getCurrentHp() <= 0) {
-                winnerRole = PlayerRole.TRAITOR.name();
+                winnerRole = PlayerRole.TRAITOR;
             }
             else {
-                winnerRole = PlayerRole.TRAITOR.name();
+                winnerRole = PlayerRole.TRAITOR;
             }
 
             room.setStatus(RoomStatus.GAME_OVER);
@@ -800,7 +857,7 @@ public class GameService {
 
             gameResponseSender.broadcastGameOver(room, winnerRole);
 
-            gameLogService.saveGameLogAsync(room, winnerRole);
+            gameLogService.saveGameLogAsync(room, winnerRole.name());
 
             taskScheduler.schedule(() -> {
                 cleanupGameOverRoom(roomId);
