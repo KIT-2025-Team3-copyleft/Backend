@@ -34,9 +34,11 @@ public class GameService {
 
 
     private static final int GAME_START_DELAY_SECONDS = 3;
+    private static final int CARD_SEND_DELAY_SECONDS = 3;
     private static final int CARD_SELECT_DURATION_SECONDS = 120;
     private static final int VOTE_PROPOSAL_SECONDS = 15;
     private static final int TRIAL_DURATION_SECONDS = 60;
+    private static final int LOADING_TIMEOUT_SECONDS = 15;
 
 
     public void tryStartGame(String sessionId) {
@@ -132,14 +134,18 @@ public class GameService {
             try {
                 room.setStatus(RoomStatus.PLAYING);
                 room.assignRoles();
+                room.clearPhaseData();
 
                 roomRepository.saveRoom(room);
                 roomRepository.removeWaitingRoom(roomId);
-                gameResponseSender.broadcastLoadGameScene(room);
 
+                gameResponseSender.broadcastLoadGameScene(room);
                 log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
 
-                startRoundInternal(roomId);
+                taskScheduler.schedule(
+                        () -> startRoundForce(roomId),
+                        Instant.now().plusSeconds(LOADING_TIMEOUT_SECONDS)
+                );
 
             } catch (Exception e) {
                 log.error("게임 시작 처리 중 저장/전송 오류 (롤백 시도): room={}", roomId, e);
@@ -150,6 +156,58 @@ public class GameService {
                 gameResponseSender.broadcastGameStartCancelled(room);
             }
 
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    public void processGameReady(String sessionId) {
+
+        String roomId = roomRepository.getRoomIdBySessionId(sessionId);
+        if (roomId == null) return;
+
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getStatus() != RoomStatus.PLAYING || room.getCurrentPhase() != null) return;
+
+            room.getCurrentPhaseData().put(sessionId, "READY");
+            roomRepository.saveRoom(room);
+
+            log.info("플레이어 로딩 완료: session={}, count={}/{}", sessionId, room.getActionCount(), room.getPlayers().size());
+
+            if (room.getActionCount() >= room.getPlayers().size()) {
+                log.info("전원 로딩 완료! 즉시 라운드 시작: room={}", roomId);
+                room.clearPhaseData();
+                roomRepository.saveRoom(room);
+
+                startRoundInternal(roomId);
+            }
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
+    }
+
+    public void startRoundForce(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getStatus() == RoomStatus.PLAYING && room.getCurrentPhase() == null) {
+                log.warn("로딩 타임아웃 발생! 게임 강제 시작: room={}", roomId);
+                room.clearPhaseData();
+                roomRepository.saveRoom(room);
+                startRoundInternal(roomId);
+            }
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
         }
@@ -184,9 +242,6 @@ public class GameService {
 
             player.setSlot(assignedSlot);
             player.setSelectedCard(null);
-
-            List<String> cards = WordData.getRandomCards(assignedSlot, 5);
-            gameResponseSender.sendCards(player.getSessionId(), assignedSlot.name(), cards);
         }
 
         room.setCurrentPhase(GamePhase.CARD_SELECT);
@@ -195,11 +250,40 @@ public class GameService {
         gameResponseSender.broadcastRoundStart(room);
 
         taskScheduler.schedule(
+                () -> sendCardsDelayed(roomId),
+                Instant.now().plusSeconds(CARD_SEND_DELAY_SECONDS)
+        );
+
+        taskScheduler.schedule(
                 () -> processCardTimeout(roomId),
-                Instant.now().plusSeconds(CARD_SELECT_DURATION_SECONDS)
+                Instant.now().plusSeconds(CARD_SEND_DELAY_SECONDS + CARD_SELECT_DURATION_SECONDS)
         );
 
         log.info("라운드 시작 완료: room={}", roomId);
+    }
+
+    public void sendCardsDelayed(String roomId) {
+        String lockToken = redisLockRepository.lock(roomId);
+        if (lockToken == null) return;
+
+        try {
+            Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
+            if (roomOpt.isEmpty()) return;
+            Room room = roomOpt.get();
+
+            if (room.getCurrentPhase() != GamePhase.CARD_SELECT) return;
+
+            for (Player player : room.getPlayers()) {
+                if (player.getSlot() != null) {
+                    List<String> cards = WordData.getRandomCards(player.getSlot(), 5);
+                    gameResponseSender.sendCards(player.getSessionId(), player.getSlot().name(), cards);
+                }
+            }
+            log.info("카드 전송 완료: room={}", roomId);
+
+        } finally {
+            redisLockRepository.unlock(roomId, lockToken);
+        }
     }
 
     public void processCardTimeout(String roomId) {
@@ -437,10 +521,9 @@ public class GameService {
             Room room = roomOpt.get();
 
             room.setCurrentPhase(GamePhase.VOTE_PROPOSAL);
-            room.clearVotes();
+            room.clearPhaseData();
 
             roomRepository.saveRoom(room);
-
             gameResponseSender.broadcastVoteProposalStart(room);
 
             taskScheduler.schedule(
@@ -470,12 +553,12 @@ public class GameService {
 
             if (room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return;
 
-            room.getProposalVotes().put(sessionId, agree);
+            room.getCurrentPhaseData().put(sessionId, String.valueOf(agree));
             roomRepository.saveRoom(room);
 
             log.info("투표 접수: session={}, agree={}", sessionId, agree);
 
-            if (room.getProposalVotes().size() >= room.getPlayers().size()) {
+            if (room.getActionCount() >= room.getPlayers().size()) {
                 log.info("전원 투표 완료! 즉시 집계 진행: room={}", roomId);
                 taskScheduler.schedule(
                         () -> processVoteProposalEnd(roomId),
@@ -500,8 +583,8 @@ public class GameService {
 
             if (room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return;
 
-            long agreeCount = room.getProposalVotes().values().stream()
-                    .filter(Boolean::booleanValue)
+            long agreeCount = room.getCurrentPhaseData().values().stream()
+                    .filter("true"::equalsIgnoreCase)
                     .count();
 
             log.info("찬반 투표 집계: room={}, agree={}", roomId, agreeCount);
@@ -530,7 +613,7 @@ public class GameService {
         room.setCurrentHp(room.getCurrentHp() - penalty);
 
         room.setCurrentPhase(GamePhase.TRIAL_VOTE);
-        room.clearVotes();
+        room.clearPhaseData();
 
         roomRepository.saveRoom(room);
 
@@ -558,12 +641,12 @@ public class GameService {
 
             if (room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return;
 
-            room.getTrialVotes().put(sessionId, targetSessionId);
+            room.getCurrentPhaseData().put(sessionId, targetSessionId);
             roomRepository.saveRoom(room);
 
             log.info("지목 투표: {} -> {}", sessionId, targetSessionId);
 
-            if (room.getTrialVotes().size() >= room.getPlayers().size()) {
+            if (room.getActionCount() >= room.getPlayers().size()) {
                 log.info("전원 지목 완료! 즉시 집계 진행: room={}", roomId);
                 taskScheduler.schedule(
                         () -> processTrialEnd(roomId),
@@ -641,7 +724,7 @@ public class GameService {
 
     private String calculateMostVoted(Room room) {
         Map<String, Integer> voteCounts = new java.util.HashMap<>();
-        for (String target : room.getTrialVotes().values()) {
+        for (String target : room.getCurrentPhaseData().values()) {
             voteCounts.put(target, voteCounts.getOrDefault(target, 0) + 1);
         }
 

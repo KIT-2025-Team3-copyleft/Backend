@@ -51,10 +51,7 @@ public class Room {
     private long createdAt = System.currentTimeMillis(); // 생성 시각 (Timestamp)
 
     @Builder.Default
-    private Map<String, Boolean> proposalVotes = new ConcurrentHashMap<>();
-
-    @Builder.Default
-    private Map<String, String> trialVotes = new ConcurrentHashMap<>();
+    private Map<String, String> currentPhaseData = new ConcurrentHashMap<>();
 
     public void addPlayer(Player player) {
         if (this.players == null) {
@@ -117,9 +114,12 @@ public class Room {
         }
     }
 
-    public void clearVotes() {
-        this.proposalVotes.clear();
-        this.trialVotes.clear();
+    public void clearPhaseData() {
+        this.currentPhaseData.clear();
+    }
+
+    public int getActionCount() {
+        return this.currentPhaseData.size();
     }
 
     public void resetForNewGame() {
@@ -127,12 +127,10 @@ public class Room {
         this.currentHp = 1000;
         this.currentRound = 1;
         this.currentPhase = null;
-
         this.godPersonality = null;
         this.isVotingDisabled = false;
 
-        this.proposalVotes.clear();
-        this.trialVotes.clear();
+        this.currentPhaseData.clear();
 
         if (this.players != null) {
             for (Player p : this.players) {
