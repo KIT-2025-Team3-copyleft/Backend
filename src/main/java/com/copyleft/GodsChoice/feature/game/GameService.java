@@ -525,6 +525,15 @@ public class GameService {
             int currentHp = room.getCurrentHp();
             room.setCurrentHp(currentHp + score);
 
+            room.addRoundHistory(
+                    room.getCurrentRound(),
+                    room.getOracle(),
+                    sentence,
+                    score,
+                    reason
+            );
+            log.info("라운드 기록 저장 완료: round={}, oracle={}", room.getCurrentRound(), room.getOracle());
+
             roomRepository.saveRoom(room);
             gameResponseSender.broadcastRoundResult(room, score, reason, sentence);
 

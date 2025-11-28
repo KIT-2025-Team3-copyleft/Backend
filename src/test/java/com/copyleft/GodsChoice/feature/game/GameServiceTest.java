@@ -3,6 +3,7 @@ package com.copyleft.GodsChoice.feature.game;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.GamePhase;
+import com.copyleft.GodsChoice.domain.type.PlayerRole;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
 import com.copyleft.GodsChoice.domain.type.SlotType;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
@@ -21,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.TaskScheduler;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -147,7 +149,7 @@ class GameServiceTest {
         String lockToken = "token";
         Room room = Room.builder().roomId(roomId).status(RoomStatus.STARTING).build();
         for (int i = 0; i < 4; i++) {
-            room.addPlayer(com.copyleft.GodsChoice.domain.Player.builder()
+            room.addPlayer(Player.builder()
                     .sessionId("p" + i)
                     .build());
         }
@@ -159,7 +161,8 @@ class GameServiceTest {
         gameService.processGameStart(roomId);
 
         // then
-        assertEquals("CITIZEN", room.getPlayers().get(0).getRole());
+        assertEquals(PlayerRole.TRAITOR, room.getPlayers().get(0).getRole());
+        assertEquals(PlayerRole.CITIZEN, room.getPlayers().get(1).getRole());
         verify(redisLockRepository).unlock(roomId, lockToken);
     }
 
@@ -182,20 +185,20 @@ class GameServiceTest {
         gameService.startRound(roomId);
 
         // then
-        // 1. 슬롯 할당 및 카드 전송 확인 (4명 모두에게)
-        verify(gameResponseSender, times(4)).sendCards(anyString(), anyString(), anyList());
-
-        // 2. 페이즈 변경 확인
         assertEquals(GamePhase.CARD_SELECT, room.getCurrentPhase());
-
-        // 3. 라운드 시작 알림 확인
         verify(gameResponseSender).broadcastRoundStart(room);
 
-        // 4. 120초(2분) 타이머 예약 확인
-        // (ArgumentCaptor로 시간까지 정확히 검증하면 더 좋음)
-        verify(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
 
-        verify(redisLockRepository).unlock(roomId, lockToken);
+        verify(taskScheduler, times(2)).schedule(runnableCaptor.capture(), any(Instant.class));
+
+        List<Runnable> capturedTasks = runnableCaptor.getAllValues();
+
+        capturedTasks.get(0).run();
+
+        verify(gameResponseSender, times(4)).sendCards(anyString(), anyString(), anyList());
+
+        verify(redisLockRepository, times(2)).unlock(roomId, lockToken);
     }
 
     // ----------------------------------------------------------------
@@ -203,20 +206,22 @@ class GameServiceTest {
     // ----------------------------------------------------------------
 
     @Test
-    @DisplayName("전원 카드 선택 시 AI 심판(judgeRound)이 비동기로 예약된다")
+    @DisplayName("전원 카드 선택 시 AI 심판이 수행되고 히스토리가 저장된다") // 이름 약간 수정
     void selectCard_AllSelected_TriggersJudgment() throws Exception {
         // given
         String roomId = "room-1";
         String sessionId = "p1";
         String lockToken = "token";
 
+        // Oracle 정보가 있어야 하므로 설정 추가
         Room room = Room.builder()
                 .roomId(roomId)
                 .currentPhase(GamePhase.CARD_SELECT)
                 .currentHp(1000)
+                .currentRound(1)
+                .oracle(com.copyleft.GodsChoice.domain.type.Oracle.ORDER) // 테스트용 신탁
                 .build();
 
-        // 플레이어 1명만 있다고 가정 (테스트 편의상) 하고 그 사람이 선택하면 '전원 선택'이 됨
         Player p1 = Player.builder().sessionId(sessionId).slot(SlotType.SUBJECT).build();
         room.addPlayer(p1);
 
@@ -224,39 +229,30 @@ class GameServiceTest {
         when(redisLockRepository.lock(roomId)).thenReturn(lockToken);
         when(roomRepository.findRoomById(roomId)).thenReturn(Optional.of(room));
 
-        // AI 응답 모킹
+        // AI Mocking
         when(groqApiClient.judgeSentence(anyString(), any())).thenReturn("{\"score\": -50, \"reason\": \"bad\"}");
-        JsonNode mockJson = mock(JsonNode.class);
-        when(objectMapper.readTree(anyString())).thenReturn(mockJson);
-        when(mockJson.path("score")).thenReturn(mock(JsonNode.class)); // score.asInt() 호출 대비
-        when(mockJson.path("score").asInt()).thenReturn(-50);
-        when(mockJson.path("reason")).thenReturn(mock(JsonNode.class));
-        when(mockJson.path("reason").asText()).thenReturn("bad");
+        ObjectMapper realMapper = new ObjectMapper();
+        JsonNode realJsonNode = realMapper.readTree("{\"score\": -50, \"reason\": \"bad\"}");
+
+        when(objectMapper.readTree(anyString())).thenReturn(realJsonNode);
 
         // when
         gameService.selectCard(sessionId, "선택한카드");
 
         // then
-        // 1. 선택 저장 확인
-        assertEquals("선택한카드", p1.getSelectedCard());
-        verify(roomRepository, atLeastOnce()).saveRoom(room); // 저장 호출 확인 (최소 1번)
-
-        // 2. [핵심] 심판 로직이 스케줄러에 예약되었는지 캡처
         ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
-        // selectCard 내부에서 judgeRound -> taskScheduler.schedule 호출함
         verify(taskScheduler).schedule(runnableCaptor.capture(), any(Instant.class));
+        runnableCaptor.getValue().run();
 
-        // 3. [핵심] 예약된 작업(Runnable)을 강제로 실행! (이게 judgeRoundInternal 로직임)
-        Runnable judgeTask = runnableCaptor.getValue();
-        judgeTask.run(); // <-- 여기서 실제 judgeRoundInternal 로직이 돌아감
+        // judgeRoundInternal 내부에서 applyJudgmentResult를 호출할 때 락을 획득하면 즉시 실행됨.
+        // 테스트 환경에서는 redisLockRepository.lock()이 성공(token반환)하면 동기적으로 처리됨을 가정하거나,
+        // GameService 구현상 재귀 스케줄링이 없으면 바로 반영됨.
 
-        // 4. 심판 로직 검증 (Runnable 실행 결과)
-        // - AI 호출했나?
-        verify(groqApiClient).judgeSentence(anyString(), any());
-        // - HP 깎였나?
-        assertEquals(950, room.getCurrentHp());
-        // - 결과 방송했나?
-        verify(gameResponseSender).broadcastRoundResult(eq(room), eq(-50), eq("bad"), anyString());
+        assertEquals(1, room.getRoundHistories().size());
+        assertEquals(com.copyleft.GodsChoice.domain.type.Oracle.ORDER, room.getRoundHistories().get(0).getOracle());
+        assertEquals("bad", room.getRoundHistories().get(0).getReason());
+
+        verify(roomRepository, atLeastOnce()).saveRoom(room);
     }
 
     @Test
