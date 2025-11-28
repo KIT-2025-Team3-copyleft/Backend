@@ -53,6 +53,9 @@ public class Room {
     @Builder.Default
     private Map<String, String> currentPhaseData = new ConcurrentHashMap<>();
 
+    @Builder.Default
+    private List<RoundHistory> roundHistories = new ArrayList<>();
+
     public void addPlayer(Player player) {
         if (this.players == null) {
             this.players = new ArrayList<>();
@@ -64,6 +67,21 @@ public class Room {
         if (this.players != null) {
             this.players.removeIf(p -> Objects.equals(p.getSessionId(), sessionId));
         }
+    }
+
+    public void addRoundHistory(int round, Oracle oracle, String sentence, int score, String reason) {
+        if (this.roundHistories == null) {
+            this.roundHistories = new ArrayList<>();
+        }
+        RoundHistory history = RoundHistory.builder()
+                .round(round)
+                .oracle(oracle)
+                .sentence(sentence)
+                .score(score)
+                .reason(reason)
+                .build();
+
+        this.roundHistories.add(history);
     }
 
     public static Room create(String roomId, String roomCode, String roomTitle, String hostSessionId, Player hostPlayer) {
@@ -133,6 +151,12 @@ public class Room {
 
         this.currentPhaseData.clear();
 
+        if (this.roundHistories != null) {
+            this.roundHistories.clear();
+        } else {
+            this.roundHistories = new ArrayList<>();
+        }
+
         if (this.players != null) {
             for (Player p : this.players) {
                 p.setRole(null);
@@ -158,4 +182,6 @@ public class Room {
         }
         throw new IllegalStateException("All colors are already assigned");
     }
+
+
 }
