@@ -230,6 +230,8 @@ public class GameService {
             room.setCurrentPhase(GamePhase.ORACLE);
             roomRepository.saveRoom(room);
 
+            gameResponseSender.broadcastRoundStart(room);
+
             // 신탁 방송
             gameResponseSender.broadcastOracle(room);
 
@@ -288,7 +290,6 @@ public class GameService {
         room.setCurrentPhase(GamePhase.CARD_SELECT);
 
         roomRepository.saveRoom(room);
-        gameResponseSender.broadcastRoundStart(room);
 
         taskScheduler.schedule(
                 () -> sendCardsDelayed(roomId),
@@ -791,6 +792,9 @@ public class GameService {
                 isGameOver = true;
                 log.info("4라운드 종료! 게임 오버 처리 예정: {}", roomId);
             } else {
+                room.setCurrentPhase(null);
+                room.clearPhaseData();
+
                 room.setCurrentRound(room.getCurrentRound() + 1);
                 room.setOracle(Oracle.values()[new Random().nextInt(Oracle.values().length)]);
 
