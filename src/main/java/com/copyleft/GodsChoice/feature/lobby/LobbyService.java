@@ -53,6 +53,7 @@ public class LobbyService {
         roomRepository.addWaitingRoom(roomId);
 
         responseSender.sendCreateSuccess(sessionId, room);
+        responseSender.broadcastLobbyUpdate(room);
 
         log.info("방 생성 완료: id={}, code={}", roomId, roomCode);
     }
