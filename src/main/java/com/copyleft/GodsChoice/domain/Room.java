@@ -1,6 +1,7 @@
 package com.copyleft.GodsChoice.domain;
 
 import com.copyleft.GodsChoice.domain.type.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -142,6 +143,7 @@ public class Room {
         }
     }
 
+    @JsonIgnore
     public PlayerColor getNextAvailableColor() {
         if (this.players == null) return PlayerColor.RED;
 
