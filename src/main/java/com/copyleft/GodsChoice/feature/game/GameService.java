@@ -34,7 +34,7 @@ public class GameService {
 
 
     private static final int GAME_START_DELAY_SECONDS = 3;
-    private static final int LOADING_TIMEOUT_SECONDS = 15;
+    private static final int LOADING_TIMEOUT_SECONDS = 5;
     private static final int ORACLE_PHASE_SECONDS = 8;
     private static final int CARD_SEND_DELAY_SECONDS = 3;
     private static final int CARD_SELECT_DURATION_SECONDS = 120;
@@ -222,7 +222,7 @@ public class GameService {
             if (roomOpt.isEmpty()) return;
             Room room = roomOpt.get();
 
-            if (room.getCurrentPhase() != null) {
+            if (room.getCurrentPhase() == GamePhase.ORACLE) {
                 log.warn("ORACLE 단계 진입 시점에 이미 다른 phase 진행 중 (중복 호출 무시): room={}, phase={}", roomId, room.getCurrentPhase());
                 return;
             }
