@@ -34,7 +34,7 @@ public class GameService {
 
 
     private static final int GAME_START_DELAY_SECONDS = 3;
-    private static final int LOADING_TIMEOUT_SECONDS = 15;
+    private static final int LOADING_TIMEOUT_SECONDS = 5;
     private static final int ORACLE_PHASE_SECONDS = 8;
     private static final int CARD_SEND_DELAY_SECONDS = 3;
     private static final int CARD_SELECT_DURATION_SECONDS = 120;
@@ -222,13 +222,15 @@ public class GameService {
             if (roomOpt.isEmpty()) return;
             Room room = roomOpt.get();
 
-            if (room.getCurrentPhase() != null) {
+            if (room.getCurrentPhase() == GamePhase.ORACLE) {
                 log.warn("ORACLE 단계 진입 시점에 이미 다른 phase 진행 중 (중복 호출 무시): room={}, phase={}", roomId, room.getCurrentPhase());
                 return;
             }
 
             room.setCurrentPhase(GamePhase.ORACLE);
             roomRepository.saveRoom(room);
+
+            gameResponseSender.broadcastRoundStart(room);
 
             // 신탁 방송
             gameResponseSender.broadcastOracle(room);
@@ -288,7 +290,6 @@ public class GameService {
         room.setCurrentPhase(GamePhase.CARD_SELECT);
 
         roomRepository.saveRoom(room);
-        gameResponseSender.broadcastRoundStart(room);
 
         taskScheduler.schedule(
                 () -> sendCardsDelayed(roomId),
@@ -791,6 +792,9 @@ public class GameService {
                 isGameOver = true;
                 log.info("4라운드 종료! 게임 오버 처리 예정: {}", roomId);
             } else {
+                room.setCurrentPhase(null);
+                room.clearPhaseData();
+
                 room.setCurrentRound(room.getCurrentRound() + 1);
                 room.setOracle(Oracle.values()[new Random().nextInt(Oracle.values().length)]);
 
