@@ -14,6 +14,8 @@ public enum SocketEvent {
     TIMER_CANCELLED,
     LOAD_GAME_SCENE,
 
+    CHAT_MESSAGE,   // 채팅 메시지
+
     SHOW_ORACLE,     // 신탁 공개 (공통)
     SHOW_ROLE,       // 내 역할 및 성향 확인 (개인)
 

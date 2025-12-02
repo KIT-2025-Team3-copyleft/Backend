@@ -16,6 +16,9 @@ public enum ErrorCode {
     ROOM_JOIN_FAILED("방 입장에 실패했습니다. 다시 시도해주세요."),
     ROOM_LEAVE_FAILED("방 퇴장 처리 중 오류가 발생했습니다."),
 
+    CHAT_BLOCKED_PHASE("현재 단계에서는 채팅을 할 수 없습니다."), // 추가
+    CHAT_EMPTY("메시지 내용을 입력해주세요."),
+
     GAME_START_FAILED("게임 시작 처리에 실패했습니다. 잠시 후 다시 시도해주세요."),
 
     NOT_HOST("방장만 게임을 시작할 수 있습니다."),

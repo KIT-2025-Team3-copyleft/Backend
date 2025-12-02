@@ -1,5 +1,7 @@
 package com.copyleft.GodsChoice.infra.websocket;
 
+import com.copyleft.GodsChoice.feature.chat.ChatService;
+import com.copyleft.GodsChoice.feature.chat.dto.ChatRequest;
 import com.copyleft.GodsChoice.feature.game.GameService;
 import com.copyleft.GodsChoice.feature.lobby.LobbyService;
 import com.copyleft.GodsChoice.feature.lobby.dto.LobbyRequest;
@@ -27,6 +29,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
     private final NicknameService nicknameService;
     private final LobbyService lobbyService;
     private final GameService gameService;
+    private final ChatService chatService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -75,6 +78,13 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
 
                 case "LEAVE_ROOM":
                     lobbyService.leaveRoom(session.getId());
+                    break;
+
+                case "SEND_CHAT":
+                    if (request.getPayload() != null) {
+                        ChatRequest chatDto = objectMapper.treeToValue(request.getPayload(), ChatRequest.class);
+                        chatService.processChat(session.getId(), chatDto.getMessage());
+                    }
                     break;
 
                 case "SELECT_CARD":
