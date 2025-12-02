@@ -206,6 +206,10 @@ public class LobbyService {
                 log.info("게임 시작 카운트다운 중단: {}", roomId);
             }
 
+            if (room.getStatus() == RoomStatus.WAITING) {
+                roomRepository.addWaitingRoom(roomId);
+            }
+
             roomRepository.saveRoom(room);
             responseSender.broadcastLobbyUpdate(room);
 
