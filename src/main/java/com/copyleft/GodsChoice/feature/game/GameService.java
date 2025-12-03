@@ -142,7 +142,6 @@ public class GameService {
 
                 roomRepository.saveRoom(room);
                 roomRepository.removeWaitingRoom(roomId);
-
                 gameResponseSender.broadcastLoadGameScene(room);
                 log.info("게임 정식 시작 (Scene 이동): room={}", roomId);
 
