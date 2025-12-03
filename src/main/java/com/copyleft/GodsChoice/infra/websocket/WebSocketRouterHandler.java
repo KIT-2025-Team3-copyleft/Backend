@@ -97,16 +97,16 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     break;
 
                 case "PROPOSE_VOTE":
-                    if (request.getPayload().has("agree")) {
-                        boolean agree = request.getPayload().get("agree").asBoolean();
-                        gameService.voteProposal(session.getId(), agree);
+                    VoteRequest proposeDto = objectMapper.treeToValue(request.getPayload(), VoteRequest.class);
+                    if (proposeDto != null && proposeDto.getAgree() != null) {
+                        gameService.voteProposal(session.getId(), proposeDto.getAgree());
                     }
                     break;
 
                 case "CAST_VOTE":
-                    if (request.getPayload().has("targetSessionId")) {
-                        String targetId = request.getPayload().get("targetSessionId").asText();
-                        gameService.castVote(session.getId(), targetId);
+                    VoteRequest castDto = objectMapper.treeToValue(request.getPayload(), VoteRequest.class);
+                    if (castDto != null && castDto.getTargetSessionId() != null) {
+                        gameService.castVote(session.getId(), castDto.getTargetSessionId());
                     }
                     break;
 
