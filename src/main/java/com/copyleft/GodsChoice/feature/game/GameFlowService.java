@@ -14,10 +14,8 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -216,17 +214,33 @@ public class GameFlowService {
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) return;
         try {
-            Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && room.getCurrentPhase() == GamePhase.CARD_SELECT) {
-                room.getPlayers().forEach(p -> {
-                    if (p.getSlot() != null) {
-                        gameResponseSender.sendCards(p.getSessionId(), p.getSlot().name(), WordData.getRandomCards(p.getSlot(), CARD_COUNT));
-                    }
-                });
-            }
+            roomRepository.findRoomById(roomId)
+                    .filter(room -> room.getCurrentPhase() == GamePhase.CARD_SELECT)
+                    .ifPresent(this::processCardDistribution);
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
         }
+    }
+
+    private void processCardDistribution(Room room) {
+        Map<SlotType, PlayerColor> slotOwners = collectSlotOwners(room.getPlayers());
+        distributeCardsToPlayers(room.getPlayers(), slotOwners);
+        log.info("카드 및 슬롯 정보 전송 완료: room={}", room.getRoomId());
+    }
+
+    private Map<SlotType, PlayerColor> collectSlotOwners(List<Player> players) {
+        return players.stream()
+                .filter(p -> p.getSlot() != null && p.getColor() != null)
+                .collect(Collectors.toMap(Player::getSlot, Player::getColor));
+    }
+
+    private void distributeCardsToPlayers(List<Player> players, Map<SlotType, PlayerColor> slotOwners) {
+        players.stream()
+                .filter(p -> p.getSlot() != null)
+                .forEach(player -> {
+                    List<String> cards = WordData.getRandomCards(player.getSlot(), CARD_COUNT);
+                    gameResponseSender.sendCards(player.getSessionId(), player.getSlot(), cards, slotOwners);
+                });
     }
 
     public void startVoteProposal(String roomId) {

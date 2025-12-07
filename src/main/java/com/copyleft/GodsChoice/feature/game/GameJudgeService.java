@@ -34,7 +34,10 @@ public class GameJudgeService {
     @Lazy // 순환 참조 해결 (Judge -> Flow)
     private final GameFlowService gameFlowService;
 
-    // --- [AI 심판] ---
+    private static final int ROUND_RESULT_DURATION_SECONDS = 35;
+
+
+    // AI 심판
 
     public void judgeRound(String roomId) {
         taskScheduler.schedule(() -> judgeRoundInternal(roomId), Instant.now());
@@ -56,14 +59,12 @@ public class GameJudgeService {
             room.setCurrentPhase(GamePhase.JUDGING);
             roomRepository.saveRoom(room);
 
-            // 문장 조합
             sentence = constructSentence(room);
             personality = room.getGodPersonality() != null ? room.getGodPersonality().getDescription() : "변덕스러운";
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
         }
 
-        // AI 호출 (락 없이 수행)
         int score = 0;
         String reason = "신이 침묵합니다.";
         try {
@@ -81,7 +82,6 @@ public class GameJudgeService {
     private void applyJudgmentResult(String roomId, int score, String reason, String sentence) {
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            // 재시도 로직
             final int s = score; final String r = reason; final String sen = sentence;
             taskScheduler.schedule(() -> applyJudgmentResult(roomId, s, r, sen), Instant.now().plusMillis(500));
             return;
@@ -94,24 +94,25 @@ public class GameJudgeService {
             roomRepository.saveRoom(room);
             gameResponseSender.broadcastRoundResult(room, score, reason, sentence);
 
-            // FlowService 호출하여 다음 단계(투표)로 이동
-            taskScheduler.schedule(() -> gameFlowService.startVoteProposal(roomId), Instant.now().plusSeconds(5));
+            taskScheduler.schedule(() -> gameFlowService.startVoteProposal(roomId), Instant.now().plusSeconds(ROUND_RESULT_DURATION_SECONDS));
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
         }
     }
 
-    // --- [타임아웃 및 결과 집계] ---
+    // 타임아웃 및 결과 집계
 
     public void processCardTimeout(String roomId) {
         String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) { /* 재시도 로직 생략 */ return; }
+        if (lockToken == null) {
+            taskScheduler.schedule(() -> processCardTimeout(roomId), Instant.now().plusSeconds(1));
+            return;
+        }
 
         boolean shouldJudge = false;
         try {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room != null && room.getCurrentPhase() == GamePhase.CARD_SELECT) {
-                // 미선택자 랜덤 선택 로직
                 boolean changed = false;
                 for (Player p : room.getPlayers()) {
                     if (p.getSelectedCard() == null) {
@@ -144,10 +145,10 @@ public class GameJudgeService {
             if (room != null && room.getCurrentPhase() == GamePhase.VOTE_PROPOSAL) {
                 long agreeCount = room.getCurrentPhaseData().values().stream().filter("true"::equalsIgnoreCase).count();
                 if (agreeCount >= 2) {
-                    gameFlowService.startTrialInternal(room); // 가결 -> 이단 심문
+                    gameFlowService.startTrialInternal(room);
                 } else {
                     gameResponseSender.broadcastVoteProposalFailed(room);
-                    taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(3)); // 부결 -> 다음 라운드
+                    taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(3));
                 }
             }
         } finally {
@@ -165,19 +166,33 @@ public class GameJudgeService {
         try {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room != null && room.getCurrentPhase() == GamePhase.TRIAL_VOTE) {
-                // 최다 득표자 계산
                 String targetSessionId = calculateMostVoted(room);
-                // 결과 처리 (HP 증감 등)
-                // ... (기존 GameService.processTrialEnd 로직 복사) ...
-
-                // 간략화:
                 boolean success = false;
                 String targetNickname = "기권";
                 PlayerRole targetRole = PlayerRole.CITIZEN;
 
                 if (targetSessionId != null) {
-                    // 타겟 찾아서 로직 수행
-                    // ...
+                    Player target = room.getPlayers().stream()
+                            .filter(p -> p.getSessionId().equals(targetSessionId))
+                            .findFirst()
+                            .orElse(null);
+
+                    if (target != null) {
+                        targetNickname = target.getNickname();
+                        targetRole = target.getRole();
+
+                        if (targetRole == PlayerRole.TRAITOR) {
+                            success = true;
+                            room.setCurrentHp(room.getCurrentHp() + 100);
+                            room.setVotingDisabled(true);
+                        }
+                        else {
+                            success = false;
+                            room.setCurrentHp(room.getCurrentHp() - 100);
+                        }
+                    }
+                } else {
+                    targetNickname = "기권";
                 }
 
                 room.setCurrentPhase(GamePhase.TRIAL_RESULT);
@@ -192,12 +207,27 @@ public class GameJudgeService {
     }
 
     private String constructSentence(Room room) {
-        // ... (문장 조합 로직) ...
-        return "";
+        StringBuilder sb = new StringBuilder();
+        List<SlotType> order = java.util.List.of(SlotType.SUBJECT, SlotType.TARGET, SlotType.HOW, SlotType.ACTION);
+
+        for (SlotType type : order) {
+            room.getPlayers().stream()
+                    .filter(p -> p.getSlot() == type)
+                    .findFirst()
+                    .ifPresent(p -> sb.append(p.getSelectedCard()).append(" "));
+        }
+        return sb.toString().trim();
     }
 
     private String calculateMostVoted(Room room) {
-        // ... (최다 득표 계산 로직) ...
-        return null;
+        Map<String, Integer> voteCounts = new java.util.HashMap<>();
+        for (String target : room.getCurrentPhaseData().values()) {
+            voteCounts.put(target, voteCounts.getOrDefault(target, 0) + 1);
+        }
+
+        return voteCounts.entrySet().stream()
+                .max(java.util.Map.Entry.comparingByValue())
+                .map(java.util.Map.Entry::getKey)
+                .orElse(null);
     }
 }

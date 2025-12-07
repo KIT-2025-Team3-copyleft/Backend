@@ -2,7 +2,8 @@ package com.copyleft.GodsChoice.infra.websocket;
 
 import com.copyleft.GodsChoice.feature.chat.ChatService;
 import com.copyleft.GodsChoice.feature.chat.dto.ChatRequest;
-import com.copyleft.GodsChoice.feature.game.GameService;
+import com.copyleft.GodsChoice.feature.game.GameFlowService;
+import com.copyleft.GodsChoice.feature.game.GamePlayService;
 import com.copyleft.GodsChoice.feature.lobby.LobbyService;
 import com.copyleft.GodsChoice.feature.lobby.dto.LobbyRequest;
 import com.copyleft.GodsChoice.feature.nickname.NicknameService;
@@ -28,7 +29,8 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
 
     private final NicknameService nicknameService;
     private final LobbyService lobbyService;
-    private final GameService gameService;
+    private final GameFlowService gameFlowService;
+    private final GamePlayService gamePlayService;
     private final ChatService chatService;
 
     @Override
@@ -52,7 +54,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                     break;
 
                 case "START_GAME":
-                    gameService.tryStartGame(session.getId());
+                    gameFlowService.tryStartGame(session.getId());
                     break;
 
                 case "GET_ROOM_LIST":
@@ -90,7 +92,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                 case "SELECT_CARD":
                     if (request.getPayload() != null && request.getPayload().has("card")) {
                         String card = request.getPayload().get("card").asText();
-                        gameService.selectCard(session.getId(), card);
+                        gamePlayService.selectCard(session.getId(), card);
                     } else {
                         log.warn("SELECT_CARD 요청 오류: payload가 없거나 card 필드 누락. session={}", session.getId());
                     }
@@ -99,19 +101,19 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
                 case "PROPOSE_VOTE":
                     VoteRequest proposeDto = objectMapper.treeToValue(request.getPayload(), VoteRequest.class);
                     if (proposeDto != null && proposeDto.getAgree() != null) {
-                        gameService.voteProposal(session.getId(), proposeDto.getAgree());
+                        gamePlayService.voteProposal(session.getId(), proposeDto.getAgree());
                     }
                     break;
 
                 case "CAST_VOTE":
                     VoteRequest castDto = objectMapper.treeToValue(request.getPayload(), VoteRequest.class);
                     if (castDto != null && castDto.getTargetSessionId() != null) {
-                        gameService.castVote(session.getId(), castDto.getTargetSessionId());
+                        gamePlayService.castVote(session.getId(), castDto.getTargetSessionId());
                     }
                     break;
 
                 case "BACK_TO_ROOM":
-                    gameService.backToRoom(session.getId());
+                    gameFlowService.backToRoom(session.getId());
                     break;
 
                 default:

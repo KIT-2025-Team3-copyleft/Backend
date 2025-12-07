@@ -21,8 +21,8 @@ public class GamePlayService {
     private final RedisLockRepository redisLockRepository;
     private final GameResponseSender gameResponseSender;
 
-    private final GameFlowService gameFlowService; // 로딩 완료 시 게임 시작 호출
-    private final GameJudgeService gameJudgeService; // 전원 카드 선택 시 심판 호출
+    private final GameFlowService gameFlowService;
+    private final GameJudgeService gameJudgeService;
 
     public void processGameReady(String sessionId) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
@@ -41,7 +41,7 @@ public class GamePlayService {
             if (room.getActionCount() >= room.getPlayers().size()) {
                 room.clearPhaseData();
                 roomRepository.saveRoom(room);
-                gameFlowService.startOraclePhase(roomId); // FlowService 호출
+                gameFlowService.startOraclePhase(roomId);
             }
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
@@ -72,7 +72,6 @@ public class GamePlayService {
 
             roomRepository.saveRoom(room);
 
-            // 모든 플레이어가 선택했는지 도메인 로직으로 확인하면 좋음 (리팩토링 포인트 4번)
             boolean allSelected = room.getPlayers().stream().allMatch(p -> p.getSelectedCard() != null);
             if (allSelected) {
                 gameResponseSender.broadcastAllCardsSelected(room);
@@ -100,7 +99,6 @@ public class GamePlayService {
                 roomRepository.saveRoom(room);
 
                 if (room.getActionCount() >= room.getPlayers().size()) {
-                    // 비동기로 하면 좋지만, 즉시 실행을 위해 스케줄러 0초 딜레이 사용
                     gameJudgeService.judgeVoteProposalEndImmediately(roomId);
                 }
             }
