@@ -142,7 +142,7 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() == GamePhase.ORACLE) return;
 
-            room.setCurrentPhase(GamePhase.ORACLE);
+            room.changePhase(GamePhase.ORACLE);
             roomRepository.saveRoom(room);
 
             gameResponseSender.broadcastRoundStart(room);
@@ -168,7 +168,7 @@ public class GameFlowService {
                 p.setSelectedCard(null);
             }
 
-            room.setCurrentPhase(GamePhase.CARD_SELECT);
+            room.changePhase(GamePhase.CARD_SELECT);
             roomRepository.saveRoom(room);
 
             // 카드 전송 예약
@@ -216,8 +216,7 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
-            room.setCurrentPhase(GamePhase.VOTE_PROPOSAL);
-            room.clearPhaseData();
+            room.changePhase(GamePhase.VOTE_PROPOSAL);
             roomRepository.saveRoom(room);
 
             gameResponseSender.broadcastVoteProposalStart(room);
@@ -227,9 +226,8 @@ public class GameFlowService {
     }
 
     public void startTrialInternal(Room room) {
-        room.setCurrentHp(room.getCurrentHp() - TRIAL_START_PENALTY);
-        room.setCurrentPhase(GamePhase.TRIAL_VOTE);
-        room.clearPhaseData();
+        room.adjustHp(-TRIAL_START_PENALTY);
+        room.changePhase(GamePhase.TRIAL_VOTE);
         roomRepository.saveRoom(room);
 
         gameResponseSender.broadcastTrialStart(room);
@@ -245,8 +243,7 @@ public class GameFlowService {
             if (room.getCurrentRound() >= 4) {
                 processGameOver(roomId);
             } else {
-                room.setCurrentPhase(null);
-                room.clearPhaseData();
+                room.changePhase(null);
                 room.setCurrentRound(room.getCurrentRound() + 1);
                 room.setOracle(Oracle.values()[new Random().nextInt(Oracle.values().length)]);
 

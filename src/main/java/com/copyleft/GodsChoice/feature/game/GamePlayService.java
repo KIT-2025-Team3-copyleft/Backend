@@ -51,15 +51,10 @@ public class GamePlayService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT) return;
 
-            room.getPlayers().stream()
-                    .filter(p -> p.getSessionId().equals(sessionId))
-                    .findFirst()
-                    .ifPresent(p -> p.setSelectedCard(cardContent));
-
+            room.findPlayer(sessionId).ifPresent(p -> p.setSelectedCard(cardContent));
             roomRepository.saveRoom(room);
 
-            boolean allSelected = room.getPlayers().stream().allMatch(p -> p.getSelectedCard() != null);
-            if (allSelected) {
+            if (room.isAllPlayersSelectedCard()) {
                 gameResponseSender.broadcastAllCardsSelected(room);
                 gameJudgeService.judgeRound(roomId);
             }

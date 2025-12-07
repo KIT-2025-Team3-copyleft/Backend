@@ -85,8 +85,7 @@ public class GameJudgeService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getStatus() == RoomStatus.GAME_OVER) return false;
 
-            int currentHp = room.getCurrentHp();
-            room.setCurrentHp(currentHp + score);
+            room.adjustHp(score);
             roomRepository.saveRoom(room);
 
             gameResponseSender.broadcastRoundResult(room, score, reason, sentence);
@@ -147,20 +146,14 @@ public class GameJudgeService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return false;
 
-            long agreeCount = room.getCurrentPhaseData().values().stream()
-                    .filter("true"::equalsIgnoreCase)
-                    .count();
+            boolean isPassed = room.isVotePassed();
+            log.info("찬반 투표 결과: room={}, passed={}", roomId, isPassed);
 
-            log.info("찬반 투표 집계: room={}, agree={}", roomId, agreeCount);
-
-            if (agreeCount >= 2) {
+            if (isPassed) {
                 gameFlowService.startTrialInternal(room);
             } else {
                 gameResponseSender.broadcastVoteProposalFailed(room);
-                taskScheduler.schedule(
-                        () -> gameFlowService.startNextRound(roomId),
-                        Instant.now().plusSeconds(3)
-                );
+                taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(3));
             }
             return true;
         });
@@ -179,35 +172,30 @@ public class GameJudgeService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return false;
 
-            String targetSessionId = calculateMostVoted(room);
+            String targetId = room.getMostVotedTargetSessionId();
             boolean success = false;
-            String targetNickname = "없음";
+            String targetNickname = "기권";
             PlayerRole targetRole = PlayerRole.CITIZEN;
 
-            if (targetSessionId != null) {
-                Player target = room.getPlayers().stream()
-                        .filter(p -> p.getSessionId().equals(targetSessionId))
-                        .findFirst()
-                        .orElse(null);
+            if (targetId != null) {
+                Player target = room.findPlayer(targetId).orElse(null);
 
                 if (target != null) {
                     targetNickname = target.getNickname();
                     targetRole = target.getRole();
 
-                    if (targetRole == PlayerRole.TRAITOR) {
-                        success = true;
-                        room.setCurrentHp(room.getCurrentHp() + 100);
+                    success = (targetRole == PlayerRole.TRAITOR);
+
+                    if (success) {
+                        room.adjustHp(100);
                         room.setVotingDisabled(true);
                     } else {
-                        success = false;
-                        room.setCurrentHp(room.getCurrentHp() - 100);
+                        room.adjustHp(-100);
                     }
                 }
-            } else {
-                targetNickname = "기권";
             }
 
-            room.setCurrentPhase(GamePhase.TRIAL_RESULT);
+            room.changePhase(GamePhase.TRIAL_RESULT);
             roomRepository.saveRoom(room);
 
             gameResponseSender.broadcastTrialResult(room, success, targetNickname, targetRole);
@@ -236,17 +224,5 @@ public class GameJudgeService {
                     .ifPresent(p -> sb.append(p.getSelectedCard()).append(" "));
         }
         return sb.toString().trim();
-    }
-
-    private String calculateMostVoted(Room room) {
-        Map<String, Integer> voteCounts = new java.util.HashMap<>();
-        for (String target : room.getCurrentPhaseData().values()) {
-            voteCounts.put(target, voteCounts.getOrDefault(target, 0) + 1);
-        }
-
-        return voteCounts.entrySet().stream()
-                .max(java.util.Map.Entry.comparingByValue())
-                .map(java.util.Map.Entry::getKey)
-                .orElse(null);
     }
 }
