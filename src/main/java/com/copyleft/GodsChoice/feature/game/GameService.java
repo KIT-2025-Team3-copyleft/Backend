@@ -38,6 +38,7 @@ public class GameService {
     private static final int ORACLE_PHASE_SECONDS = 8;
     private static final int CARD_SEND_DELAY_SECONDS = 3;
     private static final int CARD_SELECT_DURATION_SECONDS = 120;
+    private static final int ROUND_RESULT_DURATION_SECONDS = 35;
     private static final int VOTE_PROPOSAL_SECONDS = 15;
     private static final int TRIAL_DURATION_SECONDS = 60;
 
@@ -316,10 +317,17 @@ public class GameService {
 
             if (room.getCurrentPhase() != GamePhase.CARD_SELECT) return;
 
+            Map<SlotType, PlayerColor> slotOwners = new HashMap<>();
+            for (Player p : room.getPlayers()) {
+                if (p.getSlot() != null && p.getColor() != null) {
+                    slotOwners.put(p.getSlot(), p.getColor());
+                }
+            }
+
             for (Player player : room.getPlayers()) {
                 if (player.getSlot() != null) {
                     List<String> cards = WordData.getRandomCards(player.getSlot(), 5);
-                    gameResponseSender.sendCards(player.getSessionId(), player.getSlot().name(), cards);
+                    gameResponseSender.sendCards(player.getSessionId(), player.getSlot(), cards, slotOwners);
                 }
             }
             log.info("카드 전송 완료: room={}", roomId);
@@ -533,7 +541,7 @@ public class GameService {
 
             taskScheduler.schedule(
                     () -> startVoteProposal(roomId),
-                    Instant.now().plusSeconds(5)
+                    Instant.now().plusSeconds(ROUND_RESULT_DURATION_SECONDS)
             );
 
         } finally {
