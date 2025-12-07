@@ -2,12 +2,10 @@ package com.copyleft.GodsChoice.feature.game;
 
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.Player;
-import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
-import com.copyleft.GodsChoice.domain.type.GodPersonality;
-import com.copyleft.GodsChoice.domain.type.Oracle;
-import com.copyleft.GodsChoice.domain.type.PlayerRole;
+import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.feature.game.dto.GamePayloads;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
+import com.copyleft.GodsChoice.global.constant.GameCode;
 import com.copyleft.GodsChoice.global.constant.SocketEvent;
 import com.copyleft.GodsChoice.infra.websocket.WebSocketSender;
 import com.copyleft.GodsChoice.infra.websocket.dto.WebSocketResponse;
@@ -15,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -66,15 +65,16 @@ public class GameResponseSender {
         webSocketSender.sendEventToSession(player.getSessionId(), response);
     }
 
-    public void sendCards(String sessionId, String slotType, List<String> cards) {
+    public void sendCards(String sessionId, SlotType slotType, List<String> cards, Map<SlotType, PlayerColor> slotOwners) {
         GamePayloads.CardInfo data = GamePayloads.CardInfo.builder()
                 .slotType(slotType)
                 .cards(cards)
+                .slotOwners(slotOwners)
                 .build();
 
         WebSocketResponse<GamePayloads.CardInfo> response = WebSocketResponse.<GamePayloads.CardInfo>builder()
                 .event(SocketEvent.RECEIVE_CARDS.name())
-                .message("카드를 선택해주세요.")
+                .message(GameCode.REQUEST_CARD_SELECTION.getMessage())
                 .data(data)
                 .build();
 
@@ -154,11 +154,11 @@ public class GameResponseSender {
         }
     }
 
-    public void broadcastGameStartTimer(Room room) { broadcastRoomEvent(room, SocketEvent.GAME_START_TIMER, "게임 시작 3초 전!"); }
+    public void broadcastGameStartTimer(Room room) { broadcastRoomEvent(room, SocketEvent.GAME_START_TIMER, GameCode.GAME_COUNTDOWN_START.getMessage()); }
     public void broadcastLoadGameScene(Room room) { broadcastRoomEvent(room, SocketEvent.LOAD_GAME_SCENE, null); }
-    public void broadcastGameStartCancelled(Room room) { broadcastRoomEvent(room, SocketEvent.TIMER_CANCELLED, "게임 시작이 취소되었습니다."); }
+    public void broadcastGameStartCancelled(Room room) { broadcastRoomEvent(room, SocketEvent.TIMER_CANCELLED, GameCode.GAME_TIMER_CANCELLED.getMessage()); }
     public void broadcastRoundStart(Room room) { broadcastRoomEvent(room, SocketEvent.ROUND_START, "라운드가 시작되었습니다."); }
-    public void broadcastAllCardsSelected(Room room) { broadcastRoomEvent(room, SocketEvent.ALL_CARDS_SELECTED, "모든 플레이어가 선택을 완료했습니다."); }
+    public void broadcastAllCardsSelected(Room room) { broadcastRoomEvent(room, SocketEvent.ALL_CARDS_SELECTED, GameCode.ALL_USERS_SELECTED.getMessage()); }
     public void broadcastVoteProposalStart(Room room) { broadcastRoomEvent(room, SocketEvent.VOTE_PROPOSAL_START, "15"); }
     public void broadcastVoteProposalFailed(Room room) { broadcastRoomEvent(room, SocketEvent.VOTE_PROPOSAL_FAILED, "투표가 부결되었습니다."); }
     public void broadcastTrialStart(Room room) { broadcastRoomEvent(room, SocketEvent.TRIAL_START, "60"); }

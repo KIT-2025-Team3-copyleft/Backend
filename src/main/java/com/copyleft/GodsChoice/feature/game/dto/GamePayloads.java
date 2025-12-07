@@ -1,13 +1,12 @@
 package com.copyleft.GodsChoice.feature.game.dto;
 
 import com.copyleft.GodsChoice.domain.Room;
-import com.copyleft.GodsChoice.domain.type.GodPersonality;
-import com.copyleft.GodsChoice.domain.type.Oracle;
-import com.copyleft.GodsChoice.domain.type.PlayerRole;
+import com.copyleft.GodsChoice.domain.type.*;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.util.List;
+import java.util.Map;
 
 public class GamePayloads {
 
@@ -31,8 +30,9 @@ public class GamePayloads {
     @Getter
     @Builder
     public static class CardInfo {
-        private String slotType;
+        private SlotType slotType;
         private List<String> cards;
+        private Map<SlotType, PlayerColor> slotOwners;
     }
 
     // 라운드 결과 데이터
