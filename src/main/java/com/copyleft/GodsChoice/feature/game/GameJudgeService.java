@@ -25,16 +25,17 @@ import java.util.Optional;
 public class GameJudgeService {
 
     private final RoomRepository roomRepository;
-    private final RedisLockRepository redisLockRepository;
+    private final GameRoomLockFacade lockFacade;
     private final GameResponseSender gameResponseSender;
     private final GroqApiClient groqApiClient;
     private final ObjectMapper objectMapper;
     private final TaskScheduler taskScheduler;
 
-    @Lazy // 순환 참조 해결 (Judge -> Flow)
+    @Lazy
     private final GameFlowService gameFlowService;
 
     private static final int ROUND_RESULT_DURATION_SECONDS = 35;
+    private record AiPromptData(String sentence, String personality) {}
 
 
     // AI 심판
@@ -44,93 +45,97 @@ public class GameJudgeService {
     }
 
     private void judgeRoundInternal(String roomId) {
-        String sentence = null;
-        String personality = null;
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) {
-            taskScheduler.schedule(() -> judgeRoundInternal(roomId), Instant.now().plusSeconds(1));
-            return;
-        }
-
-        try {
+        AiPromptData promptData = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() == GamePhase.JUDGING) return;
+            if (room == null || room.getCurrentPhase() == GamePhase.JUDGING) return null;
 
             room.setCurrentPhase(GamePhase.JUDGING);
             roomRepository.saveRoom(room);
 
-            sentence = constructSentence(room);
-            personality = room.getGodPersonality() != null ? room.getGodPersonality().getDescription() : "변덕스러운";
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+            String sentence = constructSentence(room);
+            String personality = (room.getGodPersonality() != null)
+                    ? room.getGodPersonality().getDescription()
+                    : "변덕스러운";
+
+            return new AiPromptData(sentence, personality);
+        });
+
+        if (promptData == null) {
+            taskScheduler.schedule(() -> judgeRoundInternal(roomId), Instant.now().plusSeconds(1));
+            return;
         }
 
         int score = 0;
         String reason = "신이 침묵합니다.";
+
         try {
-            String jsonResult = groqApiClient.judgeSentence(sentence, personality);
+            String jsonResult = groqApiClient.judgeSentence(promptData.sentence(), promptData.personality());
             JsonNode root = objectMapper.readTree(jsonResult);
             score = root.path("score").asInt();
             reason = root.path("reason").asText();
         } catch (Exception e) {
-            log.error("AI 심판 오류: {}", e.getMessage());
+            log.error("AI API 오류: {}", e.getMessage());
         }
 
-        applyJudgmentResult(roomId, score, reason, sentence);
+        applyJudgmentResult(roomId, score, reason, promptData.sentence());
     }
 
     private void applyJudgmentResult(String roomId, int score, String reason, String sentence) {
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) {
-            final int s = score; final String r = reason; final String sen = sentence;
-            taskScheduler.schedule(() -> applyJudgmentResult(roomId, s, r, sen), Instant.now().plusMillis(500));
-            return;
-        }
-        try {
+        Boolean success = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getStatus() == RoomStatus.GAME_OVER) return;
+            if (room == null || room.getStatus() == RoomStatus.GAME_OVER) return false;
 
-            room.setCurrentHp(room.getCurrentHp() + score);
+            int currentHp = room.getCurrentHp();
+            room.setCurrentHp(currentHp + score);
             roomRepository.saveRoom(room);
-            gameResponseSender.broadcastRoundResult(room, score, reason, sentence);
 
+            gameResponseSender.broadcastRoundResult(room, score, reason, sentence);
+            return true;
+        });
+
+        if (success == null) {
+            taskScheduler.schedule(
+                    () -> applyJudgmentResult(roomId, score, reason, sentence),
+                    Instant.now().plusMillis(500)
+            );
+        } else if (success) {
             taskScheduler.schedule(() -> gameFlowService.startVoteProposal(roomId), Instant.now().plusSeconds(ROUND_RESULT_DURATION_SECONDS));
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
         }
     }
 
     // 타임아웃 및 결과 집계
 
     public void processCardTimeout(String roomId) {
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) {
-            taskScheduler.schedule(() -> processCardTimeout(roomId), Instant.now().plusSeconds(1));
-            return;
-        }
-
-        boolean shouldJudge = false;
-        try {
+        Boolean needsJudgment = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && room.getCurrentPhase() == GamePhase.CARD_SELECT) {
-                boolean changed = false;
-                for (Player p : room.getPlayers()) {
-                    if (p.getSelectedCard() == null) {
-                        List<String> cards = WordData.getRandomCards(p.getSlot(), 1);
-                        if (!cards.isEmpty()) {
-                            p.setSelectedCard(cards.get(0));
-                            changed = true;
-                        }
+
+            if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT) return false;
+
+            boolean changed = false;
+            for (Player p : room.getPlayers()) {
+                if (p.getSelectedCard() == null) {
+                    List<String> randomCards = WordData.getRandomCards(p.getSlot(), 1);
+                    if (!randomCards.isEmpty()) {
+                        p.setSelectedCard(randomCards.get(0));
+                        changed = true;
+                        log.info("강제 선택: player={}, card={}", p.getNickname(), p.getSelectedCard());
                     }
                 }
-                if (changed) roomRepository.saveRoom(room);
-                gameResponseSender.broadcastAllCardsSelected(room);
-                shouldJudge = true;
             }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+
+            if (changed) {
+                roomRepository.saveRoom(room);
+            }
+
+            gameResponseSender.broadcastAllCardsSelected(room);
+            return true;
+        });
+
+        if (needsJudgment == null) {
+            taskScheduler.schedule(() -> processCardTimeout(roomId), Instant.now().plusSeconds(1));
+        } else if (needsJudgment) {
+            judgeRound(roomId);
         }
-        if (shouldJudge) judgeRound(roomId);
     }
 
     public void judgeVoteProposalEndImmediately(String roomId) {
@@ -138,21 +143,30 @@ public class GameJudgeService {
     }
 
     public void processVoteProposalEnd(String roomId) {
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) return;
-        try {
+        Boolean result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && room.getCurrentPhase() == GamePhase.VOTE_PROPOSAL) {
-                long agreeCount = room.getCurrentPhaseData().values().stream().filter("true"::equalsIgnoreCase).count();
-                if (agreeCount >= 2) {
-                    gameFlowService.startTrialInternal(room);
-                } else {
-                    gameResponseSender.broadcastVoteProposalFailed(room);
-                    taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(3));
-                }
+            if (room == null || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return false;
+
+            long agreeCount = room.getCurrentPhaseData().values().stream()
+                    .filter("true"::equalsIgnoreCase)
+                    .count();
+
+            log.info("찬반 투표 집계: room={}, agree={}", roomId, agreeCount);
+
+            if (agreeCount >= 2) {
+                gameFlowService.startTrialInternal(room);
+            } else {
+                gameResponseSender.broadcastVoteProposalFailed(room);
+                taskScheduler.schedule(
+                        () -> gameFlowService.startNextRound(roomId),
+                        Instant.now().plusSeconds(3)
+                );
             }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+            return true;
+        });
+
+        if (result == null) {
+            taskScheduler.schedule(() -> processVoteProposalEnd(roomId), Instant.now().plusMillis(500));
         }
     }
 
@@ -161,48 +175,53 @@ public class GameJudgeService {
     }
 
     public void processTrialEnd(String roomId) {
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) return;
-        try {
+        Boolean result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && room.getCurrentPhase() == GamePhase.TRIAL_VOTE) {
-                String targetSessionId = calculateMostVoted(room);
-                boolean success = false;
-                String targetNickname = "기권";
-                PlayerRole targetRole = PlayerRole.CITIZEN;
+            if (room == null || room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return false;
 
-                if (targetSessionId != null) {
-                    Player target = room.getPlayers().stream()
-                            .filter(p -> p.getSessionId().equals(targetSessionId))
-                            .findFirst()
-                            .orElse(null);
+            String targetSessionId = calculateMostVoted(room);
+            boolean success = false;
+            String targetNickname = "없음";
+            PlayerRole targetRole = PlayerRole.CITIZEN;
 
-                    if (target != null) {
-                        targetNickname = target.getNickname();
-                        targetRole = target.getRole();
+            if (targetSessionId != null) {
+                Player target = room.getPlayers().stream()
+                        .filter(p -> p.getSessionId().equals(targetSessionId))
+                        .findFirst()
+                        .orElse(null);
 
-                        if (targetRole == PlayerRole.TRAITOR) {
-                            success = true;
-                            room.setCurrentHp(room.getCurrentHp() + 100);
-                            room.setVotingDisabled(true);
-                        }
-                        else {
-                            success = false;
-                            room.setCurrentHp(room.getCurrentHp() - 100);
-                        }
+                if (target != null) {
+                    targetNickname = target.getNickname();
+                    targetRole = target.getRole();
+
+                    if (targetRole == PlayerRole.TRAITOR) {
+                        success = true;
+                        room.setCurrentHp(room.getCurrentHp() + 100);
+                        room.setVotingDisabled(true);
+                    } else {
+                        success = false;
+                        room.setCurrentHp(room.getCurrentHp() - 100);
                     }
-                } else {
-                    targetNickname = "기권";
                 }
-
-                room.setCurrentPhase(GamePhase.TRIAL_RESULT);
-                roomRepository.saveRoom(room);
-                gameResponseSender.broadcastTrialResult(room, success, targetNickname, targetRole);
-
-                taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(5));
+            } else {
+                targetNickname = "기권";
             }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+
+            room.setCurrentPhase(GamePhase.TRIAL_RESULT);
+            roomRepository.saveRoom(room);
+
+            gameResponseSender.broadcastTrialResult(room, success, targetNickname, targetRole);
+            log.info("심문 결과: target={}, success={}, hp={}", targetNickname, success, room.getCurrentHp());
+
+            taskScheduler.schedule(
+                    () -> gameFlowService.startNextRound(roomId),
+                    Instant.now().plusSeconds(5)
+            );
+            return true;
+        });
+
+        if (result == null) {
+            taskScheduler.schedule(() -> processTrialEnd(roomId), Instant.now().plusMillis(500));
         }
     }
 

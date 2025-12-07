@@ -18,7 +18,7 @@ import java.util.Optional;
 public class GamePlayService {
 
     private final RoomRepository roomRepository;
-    private final RedisLockRepository redisLockRepository;
+    private final GameRoomLockFacade lockFacade;
     private final GameResponseSender gameResponseSender;
 
     private final GameFlowService gameFlowService;
@@ -28,10 +28,7 @@ public class GamePlayService {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) return;
 
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) return;
-
-        try {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getStatus() != RoomStatus.PLAYING || room.getCurrentPhase() != null) return;
 
@@ -43,56 +40,37 @@ public class GamePlayService {
                 roomRepository.saveRoom(room);
                 gameFlowService.startOraclePhase(roomId);
             }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
-        }
+        });
     }
 
     public void selectCard(String sessionId, String cardContent) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) return;
 
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) return;
-
-        boolean shouldJudge = false;
-        try {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT) return;
 
-            boolean isUpdated = false;
-            for (Player p : room.getPlayers()) {
-                if (p.getSessionId().equals(sessionId)) {
-                    p.setSelectedCard(cardContent);
-                    isUpdated = true;
-                    break;
-                }
-            }
-            if (!isUpdated) return;
+            room.getPlayers().stream()
+                    .filter(p -> p.getSessionId().equals(sessionId))
+                    .findFirst()
+                    .ifPresent(p -> p.setSelectedCard(cardContent));
 
             roomRepository.saveRoom(room);
 
             boolean allSelected = room.getPlayers().stream().allMatch(p -> p.getSelectedCard() != null);
             if (allSelected) {
                 gameResponseSender.broadcastAllCardsSelected(room);
-                shouldJudge = true;
+                gameJudgeService.judgeRound(roomId);
             }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
-        }
-
-        if (shouldJudge) {
-            gameJudgeService.judgeRound(roomId); // JudgeService 호출
-        }
+        });
     }
 
     public void voteProposal(String sessionId, boolean agree) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) return;
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) return;
 
-        try {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room != null && room.getCurrentPhase() == GamePhase.VOTE_PROPOSAL) {
                 room.getCurrentPhaseData().put(sessionId, String.valueOf(agree));
@@ -102,18 +80,14 @@ public class GamePlayService {
                     gameJudgeService.judgeVoteProposalEndImmediately(roomId);
                 }
             }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
-        }
+        });
     }
 
     public void castVote(String sessionId, String targetSessionId) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
         if (roomId == null) return;
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) return;
 
-        try {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room != null && room.getCurrentPhase() == GamePhase.TRIAL_VOTE) {
                 room.getCurrentPhaseData().put(sessionId, targetSessionId);
@@ -123,8 +97,6 @@ public class GamePlayService {
                     gameJudgeService.judgeTrialEndImmediately(roomId);
                 }
             }
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
-        }
+        });
     }
 }
