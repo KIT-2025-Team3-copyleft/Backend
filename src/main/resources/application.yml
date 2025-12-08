@@ -4,3 +4,24 @@ spring:
 
   profiles:
     active: dev
+
+  game:
+    rule:
+      # 시간 (초)
+      start-delay: 3 #GAME_START_DELAY_SECONDS = 3;
+      loading-timeout: 5 #LOADING_TIMEOUT_SECONDS
+      oracle-phase: 8 #ORACLE_PHASE_SECONDS
+      card-send-delay: 3 #CARD_SEND_DELAY_SECONDS
+      card-select-time: 120 #CARD_SELECT_DURATION_SECONDS
+      vote-proposal-time: 15 #VOTE_PROPOSAL_SECONDS
+      trial-time: 60 #TRIAL_DURATION_SECONDS
+
+      # 룰
+      card-count : 4
+      max-rounds: 4 #CARD_COUNT
+      initial-hp: 500
+
+      # 점수
+      trial-start-penalty: 50 #TRIAL_START_PENALTY
+      traitor-catch-reward: 100
+      citizen-fail-penalty: 100

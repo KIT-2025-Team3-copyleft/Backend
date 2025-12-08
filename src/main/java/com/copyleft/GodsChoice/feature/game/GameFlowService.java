@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.feature.game;
 
+import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
@@ -28,20 +29,12 @@ public class GameFlowService {
     private final LobbyResponseSender lobbyResponseSender;
     private final TaskScheduler taskScheduler;
     private final GameLogService gameLogService;
+    private final GameProperties gameProperties;
 
     // 순환 참조 방지를 위해 Lazy 주입
     @Lazy
     private final GameJudgeService gameJudgeService;
 
-    private static final int GAME_START_DELAY_SECONDS = 3;
-    private static final int LOADING_TIMEOUT_SECONDS = 5;
-    private static final int ORACLE_PHASE_SECONDS = 8;
-    private static final int CARD_COUNT = 4;
-    private static final int CARD_SEND_DELAY_SECONDS = 3;
-    private static final int CARD_SELECT_DURATION_SECONDS = 120;
-    private static final int VOTE_PROPOSAL_SECONDS = 15;
-    private static final int TRIAL_DURATION_SECONDS = 60;
-    private static final int TRIAL_START_PENALTY = 50;
 
     // 게임 시작 관련
 
@@ -63,7 +56,7 @@ public class GameFlowService {
 
             taskScheduler.schedule(
                     () -> processGameStart(roomId),
-                    Instant.now().plusSeconds(GAME_START_DELAY_SECONDS)
+                    Instant.now().plusSeconds(gameProperties.startDelay())
             );
         });
     }
@@ -111,7 +104,7 @@ public class GameFlowService {
 
             taskScheduler.schedule(
                     () -> startOraclePhase(roomId),
-                    Instant.now().plusSeconds(LOADING_TIMEOUT_SECONDS)
+                    Instant.now().plusSeconds(gameProperties.loadingTimeout())
             );
         });
     }
@@ -151,7 +144,7 @@ public class GameFlowService {
                     gameResponseSender.sendRole(p, p.getRole() == PlayerRole.TRAITOR ? room.getGodPersonality() : null)
             );
 
-            taskScheduler.schedule(() -> startRound(roomId), Instant.now().plusSeconds(ORACLE_PHASE_SECONDS));
+            taskScheduler.schedule(() -> startRound(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
         });
     }
 
@@ -172,11 +165,11 @@ public class GameFlowService {
             roomRepository.saveRoom(room);
 
             // 카드 전송 예약
-            taskScheduler.schedule(() -> sendCardsDelayed(roomId), Instant.now().plusSeconds(CARD_SEND_DELAY_SECONDS));
+            taskScheduler.schedule(() -> sendCardsDelayed(roomId), Instant.now().plusSeconds(gameProperties.cardSendDelay()));
 
             // 타임아웃 예약
             taskScheduler.schedule(() -> gameJudgeService.processCardTimeout(roomId),
-                    Instant.now().plusSeconds(CARD_SEND_DELAY_SECONDS + CARD_SELECT_DURATION_SECONDS));
+                    Instant.now().plusSeconds(gameProperties.cardSendDelay() + gameProperties.cardSelectTime()));
 
             log.info("라운드 시작: room={}", roomId);
         });
