@@ -230,7 +230,7 @@ public class GameJudgeService {
                     .filter(p -> p.getSlot() == type)
                     .findFirst()
                     .ifPresent(p -> parts.add(GamePayloads.SentencePart.builder()
-                            .nickname(p.getNickname())
+                            .playerColor(p.getColor())
                             .word(p.getSelectedCard())
                             .slotType(type)
                             .build()));

@@ -56,7 +56,7 @@ public class GamePayloads {
     @Getter
     @Builder
     public static class SentencePart {
-        private String nickname;
+        private PlayerColor playerColor;
         private String word;
         private SlotType slotType;
     }
