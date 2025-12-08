@@ -9,6 +9,7 @@ import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
@@ -30,9 +31,9 @@ public class GameFlowService {
     private final GameLogService gameLogService;
     private final GameProperties gameProperties;
 
-    // 순환 참조 방지를 위해 Lazy 주입
+    @Autowired
     @Lazy
-    private final GameJudgeService gameJudgeService;
+    private GameJudgeService gameJudgeService;
 
 
     // 게임 시작 관련
