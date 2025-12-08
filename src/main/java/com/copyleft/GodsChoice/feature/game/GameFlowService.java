@@ -310,6 +310,11 @@ public class GameFlowService {
     }
 
     private void processGameOverInternal(Room room) {
+        if (room.getStatus() == RoomStatus.GAME_OVER) {
+            log.warn("이미 종료 처리된 게임입니다. 중복 요청을 무시합니다. room={}", room.getRoomId());
+            return;
+        }
+
         PlayerRole winnerRole;
 
         if (room.isVotingDisabled() && room.getCurrentHp() > 0) {
