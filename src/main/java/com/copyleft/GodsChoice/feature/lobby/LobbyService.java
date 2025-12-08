@@ -136,7 +136,7 @@ public class LobbyService {
             Player newPlayer = Player.builder()
                     .sessionId(sessionId)
                     .nickname(nickname)
-                    .isHost(false)
+                    .host(false)
                     .connectionStatus(ConnectionStatus.CONNECTED)
                     .color(assignedColor)
                     .build();

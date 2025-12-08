@@ -42,7 +42,7 @@ public class Room {
     private Oracle oracle;         // 이번 라운드 신탁
 
     @Builder.Default
-    private boolean isVotingDisabled = false; // 배신자 색출 후 투표 잠금 여부
+    private boolean votingDisabled = false; // 배신자 색출 후 투표 잠금 여부
 
     private RoomStatus status;        // "WAITING", "STARTING", "PLAYING"
     private GamePhase currentPhase;  // "CARD_SELECT", "JUDGING", "VOTE_PROPOSAL" 등
@@ -76,7 +76,7 @@ public class Room {
                 .status(RoomStatus.WAITING)
                 .currentHp(1000)
                 .currentRound(1)
-                .isVotingDisabled(false)
+                .votingDisabled(false)
                 .createdAt(System.currentTimeMillis())
                 .build();
 
@@ -122,7 +122,7 @@ public class Room {
         this.currentPhase = null;
         this.godPersonality = null;
         this.oracle = null;
-        this.isVotingDisabled = false;
+        this.votingDisabled = false;
 
         this.currentPhaseData.clear();
 
