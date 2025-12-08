@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.feature.game;
 
+import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.type.*;
@@ -20,6 +21,7 @@ import java.util.Map;
 public class GameResponseSender {
 
     private final WebSocketSender webSocketSender;
+    private final GameProperties gameProperties;
 
     // Room 정보만 보내는 경우
     public void broadcastRoomEvent(Room room, SocketEvent event, String message) {
@@ -159,8 +161,8 @@ public class GameResponseSender {
     public void broadcastGameStartCancelled(Room room) { broadcastRoomEvent(room, SocketEvent.TIMER_CANCELLED, GameCode.GAME_TIMER_CANCELLED.getMessage()); }
     public void broadcastRoundStart(Room room) { broadcastRoomEvent(room, SocketEvent.ROUND_START, "라운드가 시작되었습니다."); }
     public void broadcastAllCardsSelected(Room room) { broadcastRoomEvent(room, SocketEvent.ALL_CARDS_SELECTED, GameCode.ALL_USERS_SELECTED.getMessage()); }
-    public void broadcastVoteProposalStart(Room room) { broadcastRoomEvent(room, SocketEvent.VOTE_PROPOSAL_START, "15"); }
+    public void broadcastVoteProposalStart(Room room) { broadcastRoomEvent(room, SocketEvent.VOTE_PROPOSAL_START, String.valueOf(gameProperties.voteProposalTime())); }
     public void broadcastVoteProposalFailed(Room room) { broadcastRoomEvent(room, SocketEvent.VOTE_PROPOSAL_FAILED, "투표가 부결되었습니다."); }
-    public void broadcastTrialStart(Room room) { broadcastRoomEvent(room, SocketEvent.TRIAL_START, "60"); }
+    public void broadcastTrialStart(Room room) { broadcastRoomEvent(room, SocketEvent.TRIAL_START, String.valueOf(gameProperties.trialTime())); }
     public void broadcastNextRound(Room room) { broadcastRoomEvent(room, SocketEvent.NEXT_ROUND_START, room.getCurrentRound() + "라운드를 준비합니다."); }
 }

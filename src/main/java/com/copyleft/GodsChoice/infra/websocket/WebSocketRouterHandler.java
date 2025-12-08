@@ -1,26 +1,25 @@
 package com.copyleft.GodsChoice.infra.websocket;
 
-import com.copyleft.GodsChoice.feature.chat.ChatService;
-import com.copyleft.GodsChoice.feature.chat.dto.ChatRequest;
-import com.copyleft.GodsChoice.feature.game.GameService;
 import com.copyleft.GodsChoice.feature.lobby.LobbyService;
-import com.copyleft.GodsChoice.feature.lobby.dto.LobbyRequest;
 import com.copyleft.GodsChoice.feature.nickname.NicknameService;
-import com.copyleft.GodsChoice.feature.nickname.dto.SetNicknameRequest;
 import com.copyleft.GodsChoice.infra.websocket.dto.WebSocketRequest;
-import com.copyleft.GodsChoice.feature.game.dto.VoteRequest;
+import com.copyleft.GodsChoice.infra.websocket.handler.WebSocketCommandHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class WebSocketRouterHandler extends TextWebSocketHandler {
 
     private final WebSocketSessionManager sessionManager;
@@ -28,94 +27,45 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
 
     private final NicknameService nicknameService;
     private final LobbyService lobbyService;
-    private final GameService gameService;
-    private final ChatService chatService;
+
+    private final Map<String, WebSocketCommandHandler> handlerMap;
+
+    public WebSocketRouterHandler(
+            WebSocketSessionManager sessionManager,
+            ObjectMapper objectMapper,
+            NicknameService nicknameService,
+            LobbyService lobbyService,
+            List<WebSocketCommandHandler> handlers
+    ) {
+        this.sessionManager = sessionManager;
+        this.objectMapper = objectMapper;
+        this.nicknameService = nicknameService;
+        this.lobbyService = lobbyService;
+        this.handlerMap = handlers.stream()
+                .collect(Collectors.toMap(WebSocketCommandHandler::getAction, Function.identity()));
+    }
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    public void afterConnectionEstablished(WebSocketSession session){
         log.info("새로운 세션 연결: {}", session.getId());
         sessionManager.registerSession(session);
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(@NonNull WebSocketSession session, TextMessage message){
         String payload = message.getPayload();
 
         try {
             WebSocketRequest request = objectMapper.readValue(payload, WebSocketRequest.class);
-            log.info("Action 수신: {}, Session: {}", request.getAction(), session.getId());
+            String action = request.getAction();
+            log.info("Action 수신: {}, Session: {}", action, session.getId());
 
-            switch (request.getAction()) {
-                case "SET_NICKNAME":
-                    SetNicknameRequest nicknameDto = objectMapper.treeToValue(request.getPayload(), SetNicknameRequest.class);
-                    nicknameService.setNickname(session.getId(), nicknameDto.getNickname());
-                    break;
+            WebSocketCommandHandler handler = handlerMap.get(action);
 
-                case "START_GAME":
-                    gameService.tryStartGame(session.getId());
-                    break;
-
-                case "GET_ROOM_LIST":
-                    lobbyService.getRoomList(session.getId());
-                    break;
-
-                case "CREATE_ROOM":
-                    lobbyService.createRoom(session.getId());
-                    break;
-
-                case "QUICK_JOIN":
-                    lobbyService.quickJoin(session.getId());
-                    break;
-
-                case "JOIN_BY_CODE":
-                    LobbyRequest lobbyDto = objectMapper.treeToValue(request.getPayload(), LobbyRequest.class);
-                    if (lobbyDto != null && lobbyDto.getRoomCode() != null) {
-                        lobbyService.joinRoomByCode(session.getId(), lobbyDto.getRoomCode());
-                    } else {
-                        log.warn("JOIN_BY_CODE 요청에 roomCode가 없습니다.");
-                    }
-                    break;
-
-                case "LEAVE_ROOM":
-                    lobbyService.leaveRoom(session.getId());
-                    break;
-
-                case "SEND_CHAT":
-                    if (request.getPayload() != null) {
-                        ChatRequest chatDto = objectMapper.treeToValue(request.getPayload(), ChatRequest.class);
-                        chatService.processChat(session.getId(), chatDto.getMessage());
-                    }
-                    break;
-
-                case "SELECT_CARD":
-                    if (request.getPayload() != null && request.getPayload().has("card")) {
-                        String card = request.getPayload().get("card").asText();
-                        gameService.selectCard(session.getId(), card);
-                    } else {
-                        log.warn("SELECT_CARD 요청 오류: payload가 없거나 card 필드 누락. session={}", session.getId());
-                    }
-                    break;
-
-                case "PROPOSE_VOTE":
-                    if (request.getPayload().has("agree")) {
-                        boolean agree = request.getPayload().get("agree").asBoolean();
-                        gameService.voteProposal(session.getId(), agree);
-                    }
-                    break;
-
-                case "CAST_VOTE":
-                    if (request.getPayload().has("targetSessionId")) {
-                        String targetId = request.getPayload().get("targetSessionId").asText();
-                        gameService.castVote(session.getId(), targetId);
-                    }
-                    break;
-
-                case "BACK_TO_ROOM":
-                    gameService.backToRoom(session.getId());
-                    break;
-
-                default:
-                    log.warn("알 수 없는 Action입니다: {}", request.getAction());
+            if (handler != null) {
+                handler.handle(session, request.getPayload());
+            } else {
+                log.warn("알 수 없는 Action 입니다: {}", action);
             }
 
         } catch (Exception e) {
@@ -124,7 +74,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+    public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status){
         log.info("세션 연결 종료: {} (사유: {})", session.getId(), status);
         sessionManager.removeSession(session);
         lobbyService.leaveRoom(session.getId());
@@ -132,7 +82,7 @@ public class WebSocketRouterHandler extends TextWebSocketHandler {
     }
 
     @Override
-    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+    public void handleTransportError(WebSocketSession session, Throwable exception){
         log.error("전송 오류 발생: [세션 ID: {}], [오류: {}]", session.getId(), exception.getMessage());
     }
 }

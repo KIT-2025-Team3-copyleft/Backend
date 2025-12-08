@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.feature.nickname;
 
+import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
 import com.copyleft.GodsChoice.feature.nickname.dto.NicknameResponse;
@@ -19,12 +20,15 @@ public class NicknameService {
 
     private final NicknameRepository nicknameRepository;
     private final WebSocketSender webSocketSender;
+    private final GameProperties gameProperties;
 
 
     public void setNickname(String sessionId, String nickname) {
 
-        if (!StringUtils.hasText(nickname) || nickname.length() < 2 || nickname.length() > 6) {
-            sendError(sessionId, ErrorCode.INVALID_NICKNAME);
+        if (!StringUtils.hasText(nickname) ||
+                nickname.length() < gameProperties.nicknameMinLength() ||
+                nickname.length() > gameProperties.nicknameMaxLength()) {
+            sendError(sessionId);
             return;
         }
 
@@ -67,11 +71,11 @@ public class NicknameService {
         log.info("닉네임 설정 완료: session={}, nickname={}", sessionId, nickname);
     }
 
-    private void sendError(String sessionId, ErrorCode errorCode) {
+    private void sendError(String sessionId) {
         NicknameResponse response = NicknameResponse.builder()
                 .event(SocketEvent.ERROR_MESSAGE.name())
-                .code(errorCode.name())
-                .message(errorCode.getMessage())
+                .code(ErrorCode.INVALID_NICKNAME.name())
+                .message(ErrorCode.INVALID_NICKNAME.getMessage())
                 .build();
         webSocketSender.sendEventToSession(sessionId, response);
     }

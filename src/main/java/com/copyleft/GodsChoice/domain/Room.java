@@ -158,4 +158,47 @@ public class Room {
         }
         throw new IllegalStateException("All colors are already assigned");
     }
+
+    public Optional<Player> findPlayer(String sessionId) {
+        return this.players.stream()
+                .filter(p -> p.getSessionId().equals(sessionId))
+                .findFirst();
+    }
+
+    public boolean isAllPlayersSelectedCard() {
+        if (players == null || players.isEmpty()) return false;
+        return players.stream().allMatch(p -> p.getSelectedCard() != null);
+    }
+
+    public boolean isVotePassed() {
+        long agreeCount = this.currentPhaseData.values().stream()
+                .filter("true"::equalsIgnoreCase)
+                .count();
+        return agreeCount >= 2;
+    }
+
+    public String getMostVotedTargetSessionId() {
+        if (this.currentPhaseData.isEmpty()) return null;
+
+        Map<String, Integer> voteCounts = new java.util.HashMap<>();
+        for (String target : this.currentPhaseData.values()) {
+            if (target != null && !target.isBlank()) {
+                voteCounts.put(target, voteCounts.getOrDefault(target, 0) + 1);
+            }
+        }
+
+        return voteCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    public void changePhase(GamePhase nextPhase) {
+        this.currentPhase = nextPhase;
+        this.currentPhaseData.clear();
+    }
+
+    public void adjustHp(int amount) {
+        this.currentHp += amount;
+    }
 }
