@@ -32,7 +32,14 @@ public class GamePayloads {
     public static class CardInfo {
         private SlotType slotType;
         private List<String> cards;
-        private Map<SlotType, PlayerColor> slotOwners;
+        private List<SlotOwnerEntry> slotOwners;
+    }
+
+    @Getter
+    @Builder
+    public static class SlotOwnerEntry {
+        private SlotType slotType;
+        private PlayerColor playerColor;
     }
 
     // 라운드 결과 데이터
@@ -42,7 +49,16 @@ public class GamePayloads {
         private Room room;
         private int score;
         private String reason;
-        private String sentence;
+        private List<SentencePart> sentenceParts;
+        private String fullSentence;
+    }
+
+    @Getter
+    @Builder
+    public static class SentencePart {
+        private String nickname;
+        private String word;
+        private SlotType slotType;
     }
 
     // 심판 결과 데이터

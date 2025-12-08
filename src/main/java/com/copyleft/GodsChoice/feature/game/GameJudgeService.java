@@ -5,10 +5,9 @@ import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.domain.vo.AiJudgment;
+import com.copyleft.GodsChoice.feature.game.dto.GamePayloads;
 import com.copyleft.GodsChoice.infra.external.GroqApiClient;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -16,6 +15,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -27,14 +27,13 @@ public class GameJudgeService {
     private final GameRoomLockFacade lockFacade;
     private final GameResponseSender gameResponseSender;
     private final GroqApiClient groqApiClient;
-    private final ObjectMapper objectMapper;
     private final TaskScheduler taskScheduler;
     private final GameProperties gameProperties;
 
     @Lazy
     private final GameFlowService gameFlowService;
 
-    private record AiPromptData(String sentence, String personality) {}
+    private record AiPromptData(String fullSentence, List<GamePayloads.SentencePart> parts, String personality) {}
 
 
     // AI 심판
@@ -51,12 +50,13 @@ public class GameJudgeService {
             room.setCurrentPhase(GamePhase.JUDGING);
             roomRepository.saveRoom(room);
 
-            String sentence = constructSentence(room);
+            List<GamePayloads.SentencePart> parts = constructSentenceParts(room);
+            String fullSentence = constructSentenceString(parts);
             String personality = (room.getGodPersonality() != null)
                     ? room.getGodPersonality().getDescription()
                     : "변덕스러운";
 
-            return new AiPromptData(sentence, personality);
+            return new AiPromptData(fullSentence, parts, personality);
         });
 
         if (result.isLockFailed()) {
@@ -69,12 +69,12 @@ public class GameJudgeService {
         }
 
         AiPromptData promptData = result.getData();
-        AiJudgment judgment = groqApiClient.judgeSentence(promptData.sentence(), promptData.personality());
+        AiJudgment judgment = groqApiClient.judgeSentence(promptData.fullSentence(), promptData.personality());
 
-        applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.sentence());
+        applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.parts(), promptData.fullSentence());
     }
 
-    private void applyJudgmentResult(String roomId, int score, String reason, String sentence) {
+    private void applyJudgmentResult(String roomId, int score, String reason, List<GamePayloads.SentencePart> parts, String fullSentence) {
         LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getStatus() == RoomStatus.GAME_OVER) return null;
@@ -82,13 +82,13 @@ public class GameJudgeService {
             room.adjustHp(score);
             roomRepository.saveRoom(room);
 
-            gameResponseSender.broadcastRoundResult(room, score, reason, sentence);
+            gameResponseSender.broadcastRoundResult(room, score, reason, parts, fullSentence);
             return true;
         });
 
         if (result.isLockFailed()) {
             taskScheduler.schedule(
-                    () -> applyJudgmentResult(roomId, score, reason, sentence),
+                    () -> applyJudgmentResult(roomId, score, reason, parts, fullSentence),
                     Instant.now().plusMillis(500)
             );
         } else if (result.isSuccess()) {
@@ -168,24 +168,31 @@ public class GameJudgeService {
 
             String targetId = room.getMostVotedTargetSessionId();
             boolean success = false;
-            String targetNickname = "기권";
+            String targetNickname = "없음";
             PlayerRole targetRole = PlayerRole.CITIZEN;
 
-            if (targetId != null) {
-                Player target = room.findPlayer(targetId).orElse(null);
+            if (targetId == null) {
+                log.info("투표 무효 (동점 또는 득표 없음): room={}", roomId);
+                gameResponseSender.broadcastTrialResult(room, false, "무효(동점)", PlayerRole.CITIZEN);
 
-                if (target != null) {
-                    targetNickname = target.getNickname();
-                    targetRole = target.getRole();
+                taskScheduler.schedule(
+                        () -> gameFlowService.startNextRound(roomId),
+                        Instant.now().plusSeconds(gameProperties.nextRoundDelay())
+                );
+                return true;
+            }
 
-                    success = (targetRole == PlayerRole.TRAITOR);
+            Player target = room.findPlayer(targetId).orElse(null);
+            if (target != null) {
+                targetNickname = target.getNickname();
+                targetRole = target.getRole();
+                success = (targetRole == PlayerRole.TRAITOR);
 
-                    if (success) {
-                        room.adjustHp(gameProperties.traitorCatchReward());
-                        room.setVotingDisabled(true);
-                    } else {
-                        room.adjustHp(-gameProperties.citizenFailPenalty());
-                    }
+                if (success) {
+                    room.adjustHp(gameProperties.traitorCatchReward());
+                    room.setVotingDisabled(true);
+                } else {
+                    room.adjustHp(-gameProperties.citizenFailPenalty());
                 }
             }
 
@@ -207,15 +214,27 @@ public class GameJudgeService {
         }
     }
 
-    private String constructSentence(Room room) {
-        StringBuilder sb = new StringBuilder();
-        List<SlotType> order = java.util.List.of(SlotType.SUBJECT, SlotType.TARGET, SlotType.HOW, SlotType.ACTION);
+    private List<GamePayloads.SentencePart> constructSentenceParts(Room room) {
+        List<GamePayloads.SentencePart> parts = new ArrayList<>();
+        List<SlotType> order = List.of(SlotType.SUBJECT, SlotType.TARGET, SlotType.HOW, SlotType.ACTION);
 
         for (SlotType type : order) {
             room.getPlayers().stream()
                     .filter(p -> p.getSlot() == type)
                     .findFirst()
-                    .ifPresent(p -> sb.append(p.getSelectedCard()).append(" "));
+                    .ifPresent(p -> parts.add(GamePayloads.SentencePart.builder()
+                            .nickname(p.getNickname())
+                            .word(p.getSelectedCard())
+                            .slotType(type)
+                            .build()));
+        }
+        return parts;
+    }
+
+    private String constructSentenceString(List<GamePayloads.SentencePart> parts) {
+        StringBuilder sb = new StringBuilder();
+        for (GamePayloads.SentencePart part : parts) {
+            sb.append(part.getWord()).append(" ");
         }
         return sb.toString().trim();
     }

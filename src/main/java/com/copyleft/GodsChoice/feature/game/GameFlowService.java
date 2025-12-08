@@ -140,9 +140,11 @@ public class GameFlowService {
 
             gameResponseSender.broadcastRoundStart(room);
             gameResponseSender.broadcastOracle(room);
-            room.getPlayers().forEach(p ->
-                    gameResponseSender.sendRole(p, p.getRole() == PlayerRole.TRAITOR ? room.getGodPersonality() : null)
-            );
+            if (room.getCurrentRound() == 1) {
+                room.getPlayers().forEach(p ->
+                        gameResponseSender.sendRole(p, p.getRole() == PlayerRole.TRAITOR ? room.getGodPersonality() : null)
+                );
+            }
 
             taskScheduler.schedule(() -> startRound(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
         });
@@ -255,7 +257,13 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
-            PlayerRole winnerRole = (room.getCurrentHp() <= 0 || !room.isVotingDisabled()) ? PlayerRole.TRAITOR : PlayerRole.CITIZEN;
+            PlayerRole winnerRole;
+
+            if (room.isVotingDisabled() && room.getCurrentHp() > 0) {
+                winnerRole = PlayerRole.CITIZEN;
+            } else {
+                winnerRole = PlayerRole.TRAITOR;
+            }
 
             room.setStatus(RoomStatus.GAME_OVER);
             roomRepository.saveRoom(room);

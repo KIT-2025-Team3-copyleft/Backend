@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -67,11 +68,18 @@ public class GameResponseSender {
         webSocketSender.sendEventToSession(player.getSessionId(), response);
     }
 
-    public void sendCards(String sessionId, SlotType slotType, List<String> cards, Map<SlotType, PlayerColor> slotOwners) {
+    public void sendCards(String sessionId, SlotType slotType, List<String> cards, Map<SlotType, PlayerColor> slotOwnersMap) {
+        List<GamePayloads.SlotOwnerEntry> slotOwnerList = slotOwnersMap.entrySet().stream()
+                .map(entry -> GamePayloads.SlotOwnerEntry.builder()
+                        .slotType(entry.getKey())
+                        .playerColor(entry.getValue())
+                        .build())
+                .toList();
+
         GamePayloads.CardInfo data = GamePayloads.CardInfo.builder()
                 .slotType(slotType)
                 .cards(cards)
-                .slotOwners(slotOwners)
+                .slotOwners(slotOwnerList)
                 .build();
 
         WebSocketResponse<GamePayloads.CardInfo> response = WebSocketResponse.<GamePayloads.CardInfo>builder()
@@ -83,12 +91,13 @@ public class GameResponseSender {
         webSocketSender.sendEventToSession(sessionId, response);
     }
 
-    public void broadcastRoundResult(Room room, int score, String reason, String sentence) {
+    public void broadcastRoundResult(Room room, int score, String reason, List<GamePayloads.SentencePart> parts, String fullSentence) {
         GamePayloads.RoundResult data = GamePayloads.RoundResult.builder()
                 .room(room)
                 .score(score)
                 .reason(reason)
-                .sentence(sentence)
+                .sentenceParts(parts)
+                .fullSentence(fullSentence)
                 .build();
 
         WebSocketResponse<GamePayloads.RoundResult> response = WebSocketResponse.<GamePayloads.RoundResult>builder()
