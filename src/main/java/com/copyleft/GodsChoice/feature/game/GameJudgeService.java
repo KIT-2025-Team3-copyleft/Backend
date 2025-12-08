@@ -147,7 +147,10 @@ public class GameJudgeService {
             log.info("찬반 투표 결과: room={}, passed={}", roomId, isPassed);
 
             if (isPassed) {
-                eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.VOTE_PROPOSAL_PASSED));
+                taskScheduler.schedule(
+                        () -> eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.VOTE_PROPOSAL_PASSED)),
+                        Instant.now()
+                );
             } else {
                 gameResponseSender.broadcastVoteProposalFailed(room);
                 taskScheduler.schedule(

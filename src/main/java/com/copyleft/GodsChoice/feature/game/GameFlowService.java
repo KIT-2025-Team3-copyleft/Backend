@@ -266,7 +266,7 @@ public class GameFlowService {
             gameResponseSender.broadcastTrialStart(room);
 
             int currentRound = room.getCurrentRound();
-            taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(room.getRoomId(), currentRound), Instant.now().plusSeconds(gameProperties.trialTime()));
+            taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(roomId, currentRound), Instant.now().plusSeconds(gameProperties.trialTime()));
         });
         if (result.isLockFailed()) {
             taskScheduler.schedule(() -> startTrialInternal(roomId), Instant.now().plusMillis(200));
