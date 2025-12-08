@@ -86,7 +86,7 @@ class GameJudgeServiceTest {
         when(roomRepository.findRoomById(roomId)).thenReturn(Optional.of(room));
 
         // when
-        gameJudgeService.processCardTimeout(roomId);
+        gameJudgeService.processCardTimeout(roomId, room.getCurrentRound());
 
         // then
         assertNotNull(p1.getSelectedCard()); // 랜덤 선택 확인

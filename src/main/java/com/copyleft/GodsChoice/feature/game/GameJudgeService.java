@@ -12,7 +12,6 @@ import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
@@ -102,11 +101,11 @@ public class GameJudgeService {
 
     // 타임아웃 및 결과 집계
 
-    public void processCardTimeout(String roomId) {
+    public void processCardTimeout(String roomId, int targetRound) {
         LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
 
-            if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT) return null;
+            if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT || room.getCurrentRound() != targetRound) return null;
 
             boolean changed = false;
             for (Player p : room.getPlayers()) {
@@ -129,20 +128,20 @@ public class GameJudgeService {
         });
 
         if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> processCardTimeout(roomId), Instant.now().plusSeconds(1));
+            taskScheduler.schedule(() -> processCardTimeout(roomId, targetRound), Instant.now().plusSeconds(1));
         } else if (result.isSuccess()) {
             judgeRound(roomId);
         }
     }
 
     public void judgeVoteProposalEndImmediately(String roomId) {
-        taskScheduler.schedule(() -> processVoteProposalEnd(roomId), Instant.now());
+        roomRepository.findRoomById(roomId).ifPresent(room -> taskScheduler.schedule(() -> processVoteProposalEnd(roomId, room.getCurrentRound()), Instant.now()));
     }
 
-    public void processVoteProposalEnd(String roomId) {
+    public void processVoteProposalEnd(String roomId, int targetRound) {
         LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return null;
+            if (room == null || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL || room.getCurrentRound() != targetRound) return null;
 
             boolean isPassed = room.isVotePassed();
             log.info("찬반 투표 결과: room={}, passed={}", roomId, isPassed);
@@ -160,18 +159,18 @@ public class GameJudgeService {
         });
 
         if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> processVoteProposalEnd(roomId), Instant.now().plusMillis(500));
+            taskScheduler.schedule(() -> processVoteProposalEnd(roomId, targetRound), Instant.now().plusMillis(500));
         }
     }
 
     public void judgeTrialEndImmediately(String roomId) {
-        taskScheduler.schedule(() -> processTrialEnd(roomId), Instant.now());
+        roomRepository.findRoomById(roomId).ifPresent(room -> taskScheduler.schedule(() -> processTrialEnd(roomId, room.getCurrentRound()), Instant.now()));
     }
 
-    public void processTrialEnd(String roomId) {
+    public void processTrialEnd(String roomId, int targetRound) {
         LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return null;
+            if (room == null || room.getCurrentPhase() != GamePhase.TRIAL_VOTE || room.getCurrentRound() != targetRound) return null;
 
             String targetId = room.getMostVotedTargetSessionId();
             boolean success = false;
@@ -217,7 +216,7 @@ public class GameJudgeService {
         });
 
         if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> processTrialEnd(roomId), Instant.now().plusMillis(500));
+            taskScheduler.schedule(() -> processTrialEnd(roomId, targetRound), Instant.now().plusMillis(500));
         }
     }
 

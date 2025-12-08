@@ -23,7 +23,7 @@ public class Player {
 
     private String sessionId; // 고유 세션 ID
     private String nickname;  // 표시용 닉네임
-    private boolean isHost;   // 방장 여부
+    private boolean host;   // 방장 여부
 
     private PlayerColor color; // "RED", "BLUE" 등
     private PlayerRole role;  // "CITIZEN", "TRAITOR"
@@ -39,7 +39,7 @@ public class Player {
         return Player.builder()
                 .sessionId(sessionId)
                 .nickname(nickname)
-                .isHost(true)
+                .host(true)
                 .connectionStatus(ConnectionStatus.CONNECTED)
                 .build();
     }

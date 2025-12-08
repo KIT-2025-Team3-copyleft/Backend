@@ -10,8 +10,6 @@ import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
@@ -46,7 +44,7 @@ public class GameFlowService {
                 break;
 
             case VOTE_PROPOSAL_PASSED:
-                roomRepository.findRoomById(roomId).ifPresent(this::startTrialInternal);
+                startTrialInternal(roomId);
                 break;
 
             case VOTE_PROPOSAL_FAILED, TRIAL_FINISHED:
@@ -151,7 +149,7 @@ public class GameFlowService {
     // 라운드 진행 흐름
 
     public void startOraclePhase(String roomId) {
-        lockFacade.execute(roomId, () -> {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() == GamePhase.ORACLE) return;
 
@@ -168,6 +166,10 @@ public class GameFlowService {
 
             taskScheduler.schedule(() -> startRound(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
         });
+
+        if (result.isLockFailed()) {
+            taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusMillis(200));
+        }
     }
 
     public void startRound(String roomId) {
@@ -185,12 +187,13 @@ public class GameFlowService {
 
             room.changePhase(GamePhase.CARD_SELECT);
             roomRepository.saveRoom(room);
+            final int currentRound = room.getCurrentRound();
 
             // 카드 전송 예약
             taskScheduler.schedule(() -> sendCardsDelayed(roomId), Instant.now().plusSeconds(gameProperties.cardSendDelay()));
 
             // 타임아웃 예약
-            taskScheduler.schedule(() -> gameJudgeService.processCardTimeout(roomId),
+            taskScheduler.schedule(() -> gameJudgeService.processCardTimeout(roomId, currentRound),
                     Instant.now().plusSeconds(gameProperties.cardSendDelay() + gameProperties.cardSelectTime()));
 
             log.info("라운드 시작: room={}", roomId);
@@ -227,36 +230,56 @@ public class GameFlowService {
     }
 
     public void startVoteProposal(String roomId) {
-        lockFacade.execute(roomId, () -> {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
+
+            if (room.isVotingDisabled()) {
+                log.info("배신자가 색출되었으므로 투표 단계를 건너뜁니다: room={}", roomId);
+                taskScheduler.schedule(() -> startNextRound(roomId), Instant.now());
+                return;
+            }
 
             room.changePhase(GamePhase.VOTE_PROPOSAL);
             roomRepository.saveRoom(room);
 
             gameResponseSender.broadcastVoteProposalStart(room);
 
-            taskScheduler.schedule(() -> gameJudgeService.processVoteProposalEnd(roomId), Instant.now().plusSeconds(gameProperties.voteProposalTime()));
+            int currentRound = room.getCurrentRound();
+            taskScheduler.schedule(() -> gameJudgeService.processVoteProposalEnd(roomId, currentRound), Instant.now().plusSeconds(gameProperties.voteProposalTime()));
         });
+
+        if (result.isLockFailed()) {
+            taskScheduler.schedule(() -> startVoteProposal(roomId), Instant.now().plusMillis(200));
+        }
     }
 
-    public void startTrialInternal(Room room) {
-        room.adjustHp(-gameProperties.trialStartPenalty());
-        room.changePhase(GamePhase.TRIAL_VOTE);
-        roomRepository.saveRoom(room);
+    public void startTrialInternal(String roomId) {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+            Room room = roomRepository.findRoomById(roomId).orElse(null);
+            if (room == null) return;
 
-        gameResponseSender.broadcastTrialStart(room);
+            room.adjustHp(-gameProperties.trialStartPenalty());
+            room.changePhase(GamePhase.TRIAL_VOTE);
+            roomRepository.saveRoom(room);
 
-        taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(room.getRoomId()), Instant.now().plusSeconds(gameProperties.trialTime()));
+            gameResponseSender.broadcastTrialStart(room);
+
+            int currentRound = room.getCurrentRound();
+            taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(room.getRoomId(), currentRound), Instant.now().plusSeconds(gameProperties.trialTime()));
+        });
+        if (result.isLockFailed()) {
+            taskScheduler.schedule(() -> startTrialInternal(roomId), Instant.now().plusMillis(200));
+        }
     }
 
     public void startNextRound(String roomId) {
-        lockFacade.execute(roomId, () -> {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
             if (room.getCurrentRound() >= 4) {
-                processGameOver(roomId);
+                taskScheduler.schedule(() -> processGameOver(roomId), Instant.now());
             } else {
                 room.changePhase(null);
                 room.setCurrentRound(room.getCurrentRound() + 1);
@@ -268,6 +291,11 @@ public class GameFlowService {
                 taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
             }
         });
+
+        if (result.isLockFailed()) {
+            log.info("락 획득 실패 (NextRound): {}, 재시도합니다.", roomId);
+            taskScheduler.schedule(() -> startNextRound(roomId), Instant.now().plusMillis(200));
+        }
     }
 
     // 게임 종료 및 기타
@@ -277,21 +305,28 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
-            PlayerRole winnerRole;
-
-            if (room.isVotingDisabled() && room.getCurrentHp() > 0) {
-                winnerRole = PlayerRole.CITIZEN;
-            } else {
-                winnerRole = PlayerRole.TRAITOR;
-            }
-
-            room.setStatus(RoomStatus.GAME_OVER);
-            roomRepository.saveRoom(room);
-            gameResponseSender.broadcastGameOver(room, winnerRole);
-            gameLogService.saveGameLogAsync(room, winnerRole.name());
-
-            taskScheduler.schedule(() -> cleanupGameOverRoom(roomId), Instant.now().plusSeconds(60));
+            processGameOverInternal(room);
         });
+    }
+
+    private void processGameOverInternal(Room room) {
+        PlayerRole winnerRole;
+
+        if (room.isVotingDisabled() && room.getCurrentHp() > 0) {
+            winnerRole = PlayerRole.CITIZEN;
+        } else {
+            winnerRole = PlayerRole.TRAITOR;
+        }
+
+        room.setStatus(RoomStatus.GAME_OVER);
+        roomRepository.saveRoom(room);
+
+        gameResponseSender.broadcastGameOver(room, winnerRole);
+        gameLogService.saveGameLogAsync(room, winnerRole.name());
+
+        taskScheduler.schedule(() -> cleanupGameOverRoom(room.getRoomId()), Instant.now().plusSeconds(60));
+
+        log.info("게임 종료 처리 완료: room={}, winner={}", room.getRoomId(), winnerRole);
     }
 
     public void cleanupGameOverRoom(String roomId) {
