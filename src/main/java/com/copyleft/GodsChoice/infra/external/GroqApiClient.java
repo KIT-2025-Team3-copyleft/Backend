@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.infra.external;
 
+import com.copyleft.GodsChoice.domain.vo.AiJudgment;
 import com.copyleft.GodsChoice.infra.external.dto.GroqRequest;
 import com.copyleft.GodsChoice.infra.external.dto.GroqResponse;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -36,7 +37,7 @@ public class GroqApiClient {
      * @param godPersonality 신의 성향 (예: "분노한", "너그러운")
      * @return AI의 답변 (JSON 문자열 -> 파싱 필요)
      */
-    public String judgeSentence(String sentence, String godPersonality) {
+    public AiJudgment judgeSentence(String sentence, String godPersonality) {
         String systemPrompt = String.format(
                 "당신은 '%s' 성향을 가진 신입니다. 인간들이 바친 문장: \"%s\" 을 평가하세요. " +
                         "응답은 오직 JSON 형식으로만 해야 합니다. " +
@@ -65,24 +66,32 @@ public class GroqApiClient {
                 if (firstChoice != null && firstChoice.getMessage() != null && firstChoice.getMessage().getContent() != null) {
                     String content = firstChoice.getMessage().getContent();
                     log.info("AI 응답 원본: {}", content);
-                    return extractJson(content);
+                    return parseContent(content);
                 }
                 log.warn("Groq API 응답 구조 이상 (content 없음): {}", response);
             }
         } catch (Exception e) {
             log.error("Groq API 호출 실패", e);
-            return "{\"score\": 0, \"reason\": \"신이 침묵합니다.\"}";
         }
 
-        return "{\"score\": 0, \"reason\": \"신이 응답하지 않습니다.\"}";
+        return AiJudgment.fallback();
     }
 
-    private String extractJson(String content) {
-        int start = content.indexOf("{");
-        int end = content.lastIndexOf("}");
-        if (start != -1 && end != -1) {
-            return content.substring(start, end + 1);
+    private AiJudgment parseContent(String content) {
+        try {
+            int start = content.indexOf("{");
+            int end = content.lastIndexOf("}");
+            if (start != -1 && end != -1) {
+                String jsonStr = content.substring(start, end + 1);
+                JsonNode root = objectMapper.readTree(jsonStr);
+                return new AiJudgment(
+                        root.path("score").asInt(),
+                        root.path("reason").asText()
+                );
+            }
+        } catch (Exception e) {
+            log.error("AI 응답 파싱 실패: content={}", content, e);
         }
-        return content;
+        return AiJudgment.fallback();
     }
 }

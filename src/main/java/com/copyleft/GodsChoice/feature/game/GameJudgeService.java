@@ -4,6 +4,7 @@ import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
+import com.copyleft.GodsChoice.domain.vo.AiJudgment;
 import com.copyleft.GodsChoice.infra.external.GroqApiClient;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -63,19 +64,8 @@ public class GameJudgeService {
             return;
         }
 
-        int score = 0;
-        String reason = "신이 침묵합니다.";
-
-        try {
-            String jsonResult = groqApiClient.judgeSentence(promptData.sentence(), promptData.personality());
-            JsonNode root = objectMapper.readTree(jsonResult);
-            score = root.path("score").asInt();
-            reason = root.path("reason").asText();
-        } catch (Exception e) {
-            log.error("AI API 오류: {}", e.getMessage());
-        }
-
-        applyJudgmentResult(roomId, score, reason, promptData.sentence());
+        AiJudgment result = groqApiClient.judgeSentence(promptData.sentence(), promptData.personality());
+        applyJudgmentResult(roomId, result.score(), result.reason(), promptData.sentence());
     }
 
     private void applyJudgmentResult(String roomId, int score, String reason, String sentence) {
