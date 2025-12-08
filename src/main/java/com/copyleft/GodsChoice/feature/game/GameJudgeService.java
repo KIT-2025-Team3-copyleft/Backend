@@ -1,10 +1,10 @@
 package com.copyleft.GodsChoice.feature.game;
 
+import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.infra.external.GroqApiClient;
-import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,8 +16,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -30,11 +28,11 @@ public class GameJudgeService {
     private final GroqApiClient groqApiClient;
     private final ObjectMapper objectMapper;
     private final TaskScheduler taskScheduler;
+    private final GameProperties gameProperties;
 
     @Lazy
     private final GameFlowService gameFlowService;
 
-    private static final int ROUND_RESULT_DURATION_SECONDS = 35;
     private record AiPromptData(String sentence, String personality) {}
 
 
@@ -98,7 +96,7 @@ public class GameJudgeService {
                     Instant.now().plusMillis(500)
             );
         } else if (success) {
-            taskScheduler.schedule(() -> gameFlowService.startVoteProposal(roomId), Instant.now().plusSeconds(ROUND_RESULT_DURATION_SECONDS));
+            taskScheduler.schedule(() -> gameFlowService.startVoteProposal(roomId), Instant.now().plusSeconds(gameProperties.roundResultDuration()));
         }
     }
 
@@ -153,7 +151,7 @@ public class GameJudgeService {
                 gameFlowService.startTrialInternal(room);
             } else {
                 gameResponseSender.broadcastVoteProposalFailed(room);
-                taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(3));
+                taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(gameProperties.voteFailDelay()));
             }
             return true;
         });
@@ -187,10 +185,10 @@ public class GameJudgeService {
                     success = (targetRole == PlayerRole.TRAITOR);
 
                     if (success) {
-                        room.adjustHp(100);
+                        room.adjustHp(gameProperties.traitorCatchReward());
                         room.setVotingDisabled(true);
                     } else {
-                        room.adjustHp(-100);
+                        room.adjustHp(-gameProperties.citizenFailPenalty());
                     }
                 }
             }
@@ -203,7 +201,7 @@ public class GameJudgeService {
 
             taskScheduler.schedule(
                     () -> gameFlowService.startNextRound(roomId),
-                    Instant.now().plusSeconds(5)
+                    Instant.now().plusSeconds(gameProperties.nextRoundDelay())
             );
             return true;
         });

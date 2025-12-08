@@ -6,7 +6,6 @@ import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.feature.lobby.LobbyResponseSender;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
-import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -199,7 +198,7 @@ public class GameFlowService {
         players.stream()
                 .filter(p -> p.getSlot() != null)
                 .forEach(player -> {
-                    List<String> cards = WordData.getRandomCards(player.getSlot(), CARD_COUNT);
+                    List<String> cards = WordData.getRandomCards(player.getSlot(), gameProperties.cardCount());
                     gameResponseSender.sendCards(player.getSessionId(), player.getSlot(), cards, slotOwners);
                 });
     }
@@ -214,18 +213,18 @@ public class GameFlowService {
 
             gameResponseSender.broadcastVoteProposalStart(room);
 
-            taskScheduler.schedule(() -> gameJudgeService.processVoteProposalEnd(roomId), Instant.now().plusSeconds(VOTE_PROPOSAL_SECONDS));
+            taskScheduler.schedule(() -> gameJudgeService.processVoteProposalEnd(roomId), Instant.now().plusSeconds(gameProperties.voteProposalTime()));
         });
     }
 
     public void startTrialInternal(Room room) {
-        room.adjustHp(-TRIAL_START_PENALTY);
+        room.adjustHp(-gameProperties.trialStartPenalty());
         room.changePhase(GamePhase.TRIAL_VOTE);
         roomRepository.saveRoom(room);
 
         gameResponseSender.broadcastTrialStart(room);
 
-        taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(room.getRoomId()), Instant.now().plusSeconds(TRIAL_DURATION_SECONDS));
+        taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(room.getRoomId()), Instant.now().plusSeconds(gameProperties.trialTime()));
     }
 
     public void startNextRound(String roomId) {
@@ -243,7 +242,7 @@ public class GameFlowService {
                 roomRepository.saveRoom(room);
                 gameResponseSender.broadcastNextRound(room);
 
-                taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusSeconds(ORACLE_PHASE_SECONDS));
+                taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
             }
         });
     }
