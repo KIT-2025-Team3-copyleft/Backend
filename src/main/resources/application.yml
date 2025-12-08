@@ -12,9 +12,9 @@ game:
     loading-timeout: 5 #LOADING_TIMEOUT_SECONDS
     oracle-phase: 8 #ORACLE_PHASE_SECONDS
     card-send-delay: 3 #CARD_SEND_DELAY_SECONDS
-    card-select-time: 120 #CARD_SELECT_DURATION_SECONDS
-    vote-proposal-time: 15 #VOTE_PROPOSAL_SECONDS
-    trial-time: 60 #TRIAL_DURATION_SECONDS
+    card-select-time: 180 #CARD_SELECT_DURATION_SECONDS
+    vote-proposal-time: 180 #VOTE_PROPOSAL_SECONDS
+    trial-time: 180 #TRIAL_DURATION_SECONDS
     round-result-duration: 35 #ROUND_RESULT_DURATION_SECONDS
     next-round-delay: 5
     vote-fail-delay: 3
