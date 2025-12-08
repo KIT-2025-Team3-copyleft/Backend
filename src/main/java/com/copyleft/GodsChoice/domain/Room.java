@@ -174,7 +174,7 @@ public class Room {
         long agreeCount = this.currentPhaseData.values().stream()
                 .filter("true"::equalsIgnoreCase)
                 .count();
-        return agreeCount >= (players.size() / 2);
+        return agreeCount >= 2;
     }
 
     public String getMostVotedTargetSessionId() {

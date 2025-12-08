@@ -14,29 +14,34 @@ public class GameRoomLockFacade {
 
     private final RedisLockRepository redisLockRepository;
 
-    public void execute(String roomId, Runnable action) {
+    public LockResult<Void> execute(String roomId, Runnable action) {
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            log.warn("락 획득 실패 (실행 건너뜀): roomId={}", roomId);
-            return;
+            log.warn("락 획득 실패: roomId={}", roomId);
+            return LockResult.lockFailed();
         }
 
         try {
             action.run();
+            return LockResult.success(null);
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
         }
     }
 
-    public <T> T execute(String roomId, Supplier<T> action) {
+    public <T> LockResult<T> execute(String roomId, Supplier<T> action) {
         String lockToken = redisLockRepository.lock(roomId);
         if (lockToken == null) {
-            log.warn("락 획득 실패 (null 반환): roomId={}", roomId);
-            return null;
+            log.warn("락 획득 실패: roomId={}", roomId);
+            return LockResult.lockFailed();
         }
 
         try {
-            return action.get();
+            T result = action.get();
+            if (result == null) {
+                return LockResult.skipped();
+            }
+            return LockResult.success(result);
         } finally {
             redisLockRepository.unlock(roomId, lockToken);
         }

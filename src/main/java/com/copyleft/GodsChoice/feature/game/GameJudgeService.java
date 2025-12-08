@@ -44,7 +44,7 @@ public class GameJudgeService {
     }
 
     private void judgeRoundInternal(String roomId) {
-        AiPromptData promptData = lockFacade.execute(roomId, () -> {
+        LockResult<AiPromptData> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() == GamePhase.JUDGING) return null;
 
@@ -59,19 +59,25 @@ public class GameJudgeService {
             return new AiPromptData(sentence, personality);
         });
 
-        if (promptData == null) {
+        if (result.isLockFailed()) {
             taskScheduler.schedule(() -> judgeRoundInternal(roomId), Instant.now().plusSeconds(1));
             return;
         }
+        if (result.isSkipped()) {
+            log.info("심판 로직 스킵됨 (조건 불일치): {}", roomId);
+            return;
+        }
 
-        AiJudgment result = groqApiClient.judgeSentence(promptData.sentence(), promptData.personality());
-        applyJudgmentResult(roomId, result.score(), result.reason(), promptData.sentence());
+        AiPromptData promptData = result.getData();
+        AiJudgment judgment = groqApiClient.judgeSentence(promptData.sentence(), promptData.personality());
+
+        applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.sentence());
     }
 
     private void applyJudgmentResult(String roomId, int score, String reason, String sentence) {
-        Boolean success = lockFacade.execute(roomId, () -> {
+        LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getStatus() == RoomStatus.GAME_OVER) return false;
+            if (room == null || room.getStatus() == RoomStatus.GAME_OVER) return null;
 
             room.adjustHp(score);
             roomRepository.saveRoom(room);
@@ -80,12 +86,12 @@ public class GameJudgeService {
             return true;
         });
 
-        if (success == null) {
+        if (result.isLockFailed()) {
             taskScheduler.schedule(
                     () -> applyJudgmentResult(roomId, score, reason, sentence),
                     Instant.now().plusMillis(500)
             );
-        } else if (success) {
+        } else if (result.isSuccess()) {
             taskScheduler.schedule(() -> gameFlowService.startVoteProposal(roomId), Instant.now().plusSeconds(gameProperties.roundResultDuration()));
         }
     }
@@ -93,10 +99,10 @@ public class GameJudgeService {
     // 타임아웃 및 결과 집계
 
     public void processCardTimeout(String roomId) {
-        Boolean needsJudgment = lockFacade.execute(roomId, () -> {
+        LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
 
-            if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT) return false;
+            if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT) return null;
 
             boolean changed = false;
             for (Player p : room.getPlayers()) {
@@ -118,9 +124,9 @@ public class GameJudgeService {
             return true;
         });
 
-        if (needsJudgment == null) {
+        if (result.isLockFailed()) {
             taskScheduler.schedule(() -> processCardTimeout(roomId), Instant.now().plusSeconds(1));
-        } else if (needsJudgment) {
+        } else if (result.isSuccess()) {
             judgeRound(roomId);
         }
     }
@@ -130,9 +136,9 @@ public class GameJudgeService {
     }
 
     public void processVoteProposalEnd(String roomId) {
-        Boolean result = lockFacade.execute(roomId, () -> {
+        LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return false;
+            if (room == null || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL) return null;
 
             boolean isPassed = room.isVotePassed();
             log.info("찬반 투표 결과: room={}, passed={}", roomId, isPassed);
@@ -146,7 +152,7 @@ public class GameJudgeService {
             return true;
         });
 
-        if (result == null) {
+        if (result.isLockFailed()) {
             taskScheduler.schedule(() -> processVoteProposalEnd(roomId), Instant.now().plusMillis(500));
         }
     }
@@ -156,9 +162,9 @@ public class GameJudgeService {
     }
 
     public void processTrialEnd(String roomId) {
-        Boolean result = lockFacade.execute(roomId, () -> {
+        LockResult<Boolean> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return false;
+            if (room == null || room.getCurrentPhase() != GamePhase.TRIAL_VOTE) return null;
 
             String targetId = room.getMostVotedTargetSessionId();
             boolean success = false;
@@ -196,7 +202,7 @@ public class GameJudgeService {
             return true;
         });
 
-        if (result == null) {
+        if (result.isLockFailed()) {
             taskScheduler.schedule(() -> processTrialEnd(roomId), Instant.now().plusMillis(500));
         }
     }
