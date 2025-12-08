@@ -106,13 +106,6 @@ public class Room {
         return this.players == null || this.players.isEmpty();
     }
 
-    public void assignRoles() {
-        if (this.players == null || this.players.isEmpty()) return;
-
-        for (Player player : this.players) {
-            player.setRole(PlayerRole.CITIZEN);
-        }
-    }
 
     public void clearPhaseData() {
         this.currentPhaseData.clear();
@@ -187,10 +180,20 @@ public class Room {
             }
         }
 
-        return voteCounts.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse(null);
+        if (voteCounts.isEmpty()) return null;
+        int maxVotes = Collections.max(voteCounts.values());
+        List<String> maxVoters = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : voteCounts.entrySet()) {
+            if (entry.getValue() == maxVotes) {
+                maxVoters.add(entry.getKey());
+            }
+        }
+
+        if (maxVoters.size() > 1) {
+            return null;
+        }
+
+        return maxVoters.getFirst();
     }
 
     public void changePhase(GamePhase nextPhase) {
