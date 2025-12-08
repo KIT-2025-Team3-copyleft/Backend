@@ -4,6 +4,7 @@ import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
+import com.copyleft.GodsChoice.feature.game.event.GameDecisionEvent;
 import com.copyleft.GodsChoice.feature.lobby.LobbyResponseSender;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
@@ -11,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
@@ -31,9 +33,27 @@ public class GameFlowService {
     private final GameLogService gameLogService;
     private final GameProperties gameProperties;
 
-    @Autowired
-    @Lazy
-    private GameJudgeService gameJudgeService;
+    private final GameJudgeService gameJudgeService;
+
+    @EventListener
+    public void handleGameDecision(GameDecisionEvent event) {
+        String roomId = event.getRoomId();
+        log.info("게임 흐름 이벤트 수신: room={}, type={}", roomId, event.getType());
+
+        switch (event.getType()) {
+            case ROUND_JUDGED:
+                startVoteProposal(roomId);
+                break;
+
+            case VOTE_PROPOSAL_PASSED:
+                roomRepository.findRoomById(roomId).ifPresent(this::startTrialInternal);
+                break;
+
+            case VOTE_PROPOSAL_FAILED, TRIAL_FINISHED:
+                startNextRound(roomId);
+                break;
+        }
+    }
 
 
     // 게임 시작 관련

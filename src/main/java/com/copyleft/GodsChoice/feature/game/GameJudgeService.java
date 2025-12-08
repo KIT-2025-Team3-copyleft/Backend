@@ -6,10 +6,12 @@ import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.domain.vo.AiJudgment;
 import com.copyleft.GodsChoice.feature.game.dto.GamePayloads;
+import com.copyleft.GodsChoice.feature.game.event.GameDecisionEvent;
 import com.copyleft.GodsChoice.infra.external.GroqApiClient;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
@@ -30,8 +32,7 @@ public class GameJudgeService {
     private final TaskScheduler taskScheduler;
     private final GameProperties gameProperties;
 
-    @Lazy
-    private final GameFlowService gameFlowService;
+    private final ApplicationEventPublisher eventPublisher;
 
     private record AiPromptData(String fullSentence, List<GamePayloads.SentencePart> parts, String personality) {}
 
@@ -92,7 +93,10 @@ public class GameJudgeService {
                     Instant.now().plusMillis(500)
             );
         } else if (result.isSuccess()) {
-            taskScheduler.schedule(() -> gameFlowService.startVoteProposal(roomId), Instant.now().plusSeconds(gameProperties.roundResultDuration()));
+            taskScheduler.schedule(
+                    () -> eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.ROUND_JUDGED)),
+                    Instant.now().plusSeconds(gameProperties.roundResultDuration())
+            );
         }
     }
 
@@ -109,7 +113,7 @@ public class GameJudgeService {
                 if (p.getSelectedCard() == null) {
                     List<String> randomCards = WordData.getRandomCards(p.getSlot(), 1);
                     if (!randomCards.isEmpty()) {
-                        p.setSelectedCard(randomCards.get(0));
+                        p.setSelectedCard(randomCards.getFirst());
                         changed = true;
                         log.info("강제 선택: player={}, card={}", p.getNickname(), p.getSelectedCard());
                     }
@@ -144,10 +148,13 @@ public class GameJudgeService {
             log.info("찬반 투표 결과: room={}, passed={}", roomId, isPassed);
 
             if (isPassed) {
-                gameFlowService.startTrialInternal(room);
+                eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.VOTE_PROPOSAL_PASSED));
             } else {
                 gameResponseSender.broadcastVoteProposalFailed(room);
-                taskScheduler.schedule(() -> gameFlowService.startNextRound(roomId), Instant.now().plusSeconds(gameProperties.voteFailDelay()));
+                taskScheduler.schedule(
+                        () -> eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.VOTE_PROPOSAL_FAILED)),
+                        Instant.now().plusSeconds(gameProperties.voteFailDelay())
+                );
             }
             return true;
         });
@@ -176,7 +183,7 @@ public class GameJudgeService {
                 gameResponseSender.broadcastTrialResult(room, false, "무효(동점)", PlayerRole.CITIZEN);
 
                 taskScheduler.schedule(
-                        () -> gameFlowService.startNextRound(roomId),
+                        () -> eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.TRIAL_FINISHED)),
                         Instant.now().plusSeconds(gameProperties.nextRoundDelay())
                 );
                 return true;
@@ -203,7 +210,7 @@ public class GameJudgeService {
             log.info("심문 결과: target={}, success={}, hp={}", targetNickname, success, room.getCurrentHp());
 
             taskScheduler.schedule(
-                    () -> gameFlowService.startNextRound(roomId),
+                    () -> eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.TRIAL_FINISHED)),
                     Instant.now().plusSeconds(gameProperties.nextRoundDelay())
             );
             return true;
