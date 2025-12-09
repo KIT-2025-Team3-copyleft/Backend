@@ -98,6 +98,7 @@ public class GroqApiClient {
 
         GroqRequest request = GroqRequest.builder()
                 .model(model)
+                .temperature(0.4)
                 .messages(java.util.List.of(
                         GroqRequest.Message.builder()
                                 .role("system")
