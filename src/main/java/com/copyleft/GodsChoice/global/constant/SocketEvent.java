@@ -26,8 +26,10 @@ public enum SocketEvent {
     ROUND_RESULT,            // 라운드 결과 (AI 점수)
 
     VOTE_PROPOSAL_START, // 찬반 투표 시작
+    VOTE_PROPOSAL_UPDATE,// 찬반 투표 현황 (몇 명 참여했는지)
     VOTE_PROPOSAL_FAILED,// 찬반 투표 부결
     TRIAL_START,         // 이단 심문(본 투표) 시작
+    TRIAL_VOTE_UPDATE,   // 이단 심문 현황 (누가 몇 표 받았는지)
     TRIAL_RESULT,        // 심판 결과
     NEXT_ROUND_START,    // 다음 라운드
     GAME_OVER,           // 게임 종료

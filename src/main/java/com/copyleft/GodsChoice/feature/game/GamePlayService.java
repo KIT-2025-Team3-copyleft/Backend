@@ -21,27 +21,8 @@ public class GamePlayService {
     private final GameRoomLockFacade lockFacade;
     private final GameResponseSender gameResponseSender;
 
-    private final GameFlowService gameFlowService;
     private final GameJudgeService gameJudgeService;
 
-    public void processGameReady(String sessionId) {
-        String roomId = roomRepository.getRoomIdBySessionId(sessionId);
-        if (roomId == null) return;
-
-        lockFacade.execute(roomId, () -> {
-            Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getStatus() != RoomStatus.PLAYING || room.getCurrentPhase() != null) return;
-
-            room.getCurrentPhaseData().put(sessionId, "READY");
-            roomRepository.saveRoom(room);
-
-            if (room.getActionCount() >= room.getPlayers().size()) {
-                room.clearPhaseData();
-                roomRepository.saveRoom(room);
-                gameFlowService.startOraclePhase(roomId);
-            }
-        });
-    }
 
     public void selectCard(String sessionId, String cardContent) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
@@ -71,6 +52,8 @@ public class GamePlayService {
                 room.getCurrentPhaseData().put(sessionId, String.valueOf(agree));
                 roomRepository.saveRoom(room);
 
+                gameResponseSender.broadcastVoteUpdate(room);
+
                 if (room.getActionCount() >= room.getPlayers().size()) {
                     gameJudgeService.judgeVoteProposalEndImmediately(roomId);
                 }
@@ -87,6 +70,8 @@ public class GamePlayService {
             if (room != null && room.getCurrentPhase() == GamePhase.TRIAL_VOTE) {
                 room.getCurrentPhaseData().put(sessionId, targetSessionId);
                 roomRepository.saveRoom(room);
+
+                gameResponseSender.broadcastTrialVoteUpdate(room);
 
                 if (room.getActionCount() >= room.getPlayers().size()) {
                     gameJudgeService.judgeTrialEndImmediately(roomId);

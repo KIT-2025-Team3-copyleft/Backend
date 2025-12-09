@@ -13,6 +13,8 @@ import com.copyleft.GodsChoice.infra.websocket.dto.WebSocketResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -107,6 +109,51 @@ public class GameResponseSender {
         WebSocketResponse<GamePayloads.RoundResult> response = WebSocketResponse.<GamePayloads.RoundResult>builder()
                 .event(SocketEvent.ROUND_RESULT.name())
                 .message(reason)
+                .data(data)
+                .build();
+
+        broadcastToRoom(room, response);
+    }
+
+    public void broadcastVoteUpdate(Room room) {
+        int currentCount = room.getCurrentPhaseData().size();
+        int total = room.getPlayers().size();
+
+        GamePayloads.VoteUpdate data = GamePayloads.VoteUpdate.builder()
+                .count(currentCount)
+                .totalPlayers(total)
+                .build();
+
+        WebSocketResponse<GamePayloads.VoteUpdate> response = WebSocketResponse.<GamePayloads.VoteUpdate>builder()
+                .event(SocketEvent.VOTE_PROPOSAL_UPDATE.name())
+                .data(data)
+                .build();
+
+        broadcastToRoom(room, response);
+    }
+
+    public void broadcastTrialVoteUpdate(Room room) {
+        Map<String, Integer> countMap = new HashMap<>();
+        for (String targetId : room.getCurrentPhaseData().values()) {
+            if (targetId != null) {
+                countMap.put(targetId, countMap.getOrDefault(targetId, 0) + 1);
+            }
+        }
+
+        List<GamePayloads.TargetVoteCount> list = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : countMap.entrySet()) {
+            list.add(GamePayloads.TargetVoteCount.builder()
+                    .targetId(entry.getKey())
+                    .count(entry.getValue())
+                    .build());
+        }
+
+        GamePayloads.TrialVoteUpdate data = GamePayloads.TrialVoteUpdate.builder()
+                .voteStatus(list)
+                .build();
+
+        WebSocketResponse<GamePayloads.TrialVoteUpdate> response = WebSocketResponse.<GamePayloads.TrialVoteUpdate>builder()
+                .event(SocketEvent.TRIAL_VOTE_UPDATE.name())
                 .data(data)
                 .build();
 
