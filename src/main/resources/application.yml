@@ -12,16 +12,16 @@ game:
     loading-timeout: 5 #LOADING_TIMEOUT_SECONDS
     oracle-phase: 8 #ORACLE_PHASE_SECONDS
     card-send-delay: 3 #CARD_SEND_DELAY_SECONDS
-    card-select-time: 180 #CARD_SELECT_DURATION_SECONDS
-    vote-proposal-time: 180 #VOTE_PROPOSAL_SECONDS
-    trial-time: 180 #TRIAL_DURATION_SECONDS
+    card-select-time: 30 #CARD_SELECT_DURATION_SECONDS
+    vote-proposal-time: 30 #VOTE_PROPOSAL_SECONDS
+    trial-time: 30 #TRIAL_DURATION_SECONDS
     round-result-duration: 35 #ROUND_RESULT_DURATION_SECONDS
     next-round-delay: 5
     vote-fail-delay: 3
     game-over-cleanup-time: 60
 
     # 룰
-    card-count : 4 #CARD_COUNT
+    card-count : 8 #CARD_COUNT
     max-rounds: 4
     initial-hp: 500
     max-player-count: 4
