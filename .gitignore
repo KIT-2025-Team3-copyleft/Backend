@@ -36,4 +36,3 @@ out/
 
 ### VS Code ###
 .vscode/
-src/test/java/com/copyleft/GodsChoice/infra/external/GroqApiClientTest.java
