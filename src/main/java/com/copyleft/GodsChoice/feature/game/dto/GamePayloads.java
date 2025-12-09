@@ -61,6 +61,26 @@ public class GamePayloads {
         private SlotType slotType;
     }
 
+    @Getter
+    @Builder
+    public static class VoteUpdate {
+        private int count;       // 현재 투표한 인원 수
+        private int totalPlayers;// 전체 인원 수
+    }
+
+    @Getter
+    @Builder
+    public static class TrialVoteUpdate {
+        private List<TargetVoteCount> voteStatus;
+    }
+
+    @Getter
+    @Builder
+    public static class TargetVoteCount {
+        private String targetId; // 투표 받은 사람의 SessionId
+        private int count;       // 득표 수
+    }
+
     // 심판 결과 데이터
     @Getter
     @Builder
