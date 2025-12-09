@@ -15,7 +15,7 @@ public class GamePayloads {
     @Builder
     public static class OracleInfo {
         private Room room;
-        private Oracle oracle; // Enum
+        private String oracle;
     }
 
     // 역할 공개용 데이터 (개인)
@@ -23,7 +23,7 @@ public class GamePayloads {
     @Builder
     public static class RoleInfo {
         private PlayerRole role;
-        private GodPersonality godPersonality; // 배신자용
+        private String godPersonality; // 배신자용
     }
 
     // 카드 수신용 데이터

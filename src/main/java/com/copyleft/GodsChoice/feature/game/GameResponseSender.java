@@ -38,7 +38,7 @@ public class GameResponseSender {
     public void broadcastOracle(Room room) {
         GamePayloads.OracleInfo data = GamePayloads.OracleInfo.builder()
                 .room(room)
-                .oracle(room.getOracle())
+                .oracle(room.getOracle().getMessage())
                 .build();
 
         WebSocketResponse<GamePayloads.OracleInfo> response = WebSocketResponse.<GamePayloads.OracleInfo>builder()
@@ -54,9 +54,13 @@ public class GameResponseSender {
     public void sendRole(Player player, GodPersonality godPersonality) {
         String msg = "당신은 " + (player.getRole() == PlayerRole.TRAITOR ? "배신자" : "시민") + "입니다.";
 
+        String personalityText = (godPersonality != null)
+                ? godPersonality.getDisplayName()
+                : null;
+
         GamePayloads.RoleInfo data = GamePayloads.RoleInfo.builder()
                 .role(player.getRole())
-                .godPersonality(godPersonality)
+                .godPersonality(personalityText)
                 .build();
 
         WebSocketResponse<GamePayloads.RoleInfo> response = WebSocketResponse.<GamePayloads.RoleInfo>builder()
