@@ -33,7 +33,7 @@ public class GameJudgeService {
 
     private final ApplicationEventPublisher eventPublisher;
 
-    private record AiPromptData(String fullSentence, List<GamePayloads.SentencePart> parts, String personality) {}
+    private record AiPromptData(String fullSentence, List<GamePayloads.SentencePart> parts, String personality, String oracleMessage) {}
 
 
     // AI 심판
@@ -55,8 +55,11 @@ public class GameJudgeService {
             String personality = (room.getGodPersonality() != null)
                     ? room.getGodPersonality().getDescription()
                     : "변덕스러운";
+            String oracleMessage = (room.getOracle() != null)
+                    ? room.getOracle().getMessage()
+                    : "운명에 맡겨라";
 
-            return new AiPromptData(fullSentence, parts, personality);
+            return new AiPromptData(fullSentence, parts, personality, oracleMessage);
         });
 
         if (result.isLockFailed()) {
@@ -69,7 +72,7 @@ public class GameJudgeService {
         }
 
         AiPromptData promptData = result.getData();
-        AiJudgment judgment = groqApiClient.judgeSentence(promptData.fullSentence(), promptData.personality());
+        AiJudgment judgment = groqApiClient.judgeSentence(promptData.fullSentence(), promptData.personality(), promptData.oracleMessage());
 
         applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.parts(), promptData.fullSentence());
     }

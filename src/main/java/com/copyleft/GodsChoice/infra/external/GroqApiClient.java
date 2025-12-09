@@ -35,21 +35,42 @@ public class GroqApiClient {
      * AI에게 문장 심판을 요청합니다.
      * @param sentence 플레이어들이 조합한 문장
      * @param godPersonality 신의 성향 (예: "분노한", "너그러운")
-     * @return AI의 답변 (JSON 문자열 -> 파싱 필요)
+     * @param oracle 이번 라운드의 신탁 내용 (예: "마을에 활력을 불어넣어라")
+     * @return AI의 답변
      */
-    public AiJudgment judgeSentence(String sentence, String godPersonality) {
-        String systemPrompt = String.format(
-                "당신은 '%s' 성향을 가진 신입니다. 인간들이 바친 문장: \"%s\" 을 평가하세요. " +
-                        "응답은 오직 JSON 형식으로만 해야 합니다. " +
-                        "형식: {\"score\": -100~100사이정수, \"reason\": \"한줄평\"}",
-                godPersonality, sentence
+    public AiJudgment judgeSentence(String sentence, String godPersonality, String oracle) {
+        String systemPrompt = String.format("""
+                당신은 '%s' 성향을 가진 신입니다.
+                
+                [상황]
+                1. 당신이 내린 신탁(Oracle): "%s"
+                2. 인간들이 바친 문장(Sentence): "%s"
+                
+                [지시사항]
+                1. 당신의 성향('%s')에 입각하여 신탁을 재해석하십시오.
+                   (예: '잔혹한' 신에게 '활력'이란 '파괴의 불꽃'일 수 있고, '장난꾸러기' 신에게는 '우스꽝스러운 소동'일 수 있습니다.)
+                2. 인간의 문장이 당신의 해석에 부합하거나, 당신의 기분을 만족시켰는지 판단하여 점수(-100 ~ 100)를 매기세요.
+                3. 'reason' 필드에는 당신의 성향이 드러나는 '말투'로 한 줄 평가를 남기세요.
+                
+                [제약사항]
+                - 응답은 오직 JSON 형식이어야 합니다: {"score": 정수, "reason": "문자열"}
+                - 'reason'은 반드시 한글로 작성하세요(한자 사용 금지).
+                - 'reason'은 공백 포함 50자 이내로 짧고 강렬하게 작성하세요.
+                """,
+                godPersonality, oracle, sentence, godPersonality
         );
 
         GroqRequest request = GroqRequest.builder()
                 .model(model)
                 .messages(java.util.List.of(
-                        GroqRequest.Message.builder().role("system").content("You are a creative game master. Answer in JSON format.").build(),
-                        GroqRequest.Message.builder().role("user").content(systemPrompt).build()
+                        GroqRequest.Message.builder()
+                                .role("system")
+                                .content("You are a god in a game. Act according to your personality. Response strictly in JSON format.")
+                                .build(),
+                        GroqRequest.Message.builder()
+                                .role("user")
+                                .content(systemPrompt)
+                                .build()
                 ))
                 .build();
 
