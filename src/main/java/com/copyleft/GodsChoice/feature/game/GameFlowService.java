@@ -5,11 +5,13 @@ import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.feature.game.event.GameDecisionEvent;
+import com.copyleft.GodsChoice.feature.game.event.GameUserTimeoutEvent;
 import com.copyleft.GodsChoice.feature.lobby.LobbyResponseSender;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
@@ -30,8 +32,8 @@ public class GameFlowService {
     private final TaskScheduler taskScheduler;
     private final GameLogService gameLogService;
     private final GameProperties gameProperties;
-
     private final GameJudgeService gameJudgeService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @EventListener
     public void handleGameDecision(GameDecisionEvent event) {
@@ -94,6 +96,10 @@ public class GameFlowService {
         }
         if (room.getStatus() != RoomStatus.WAITING) {
             gameResponseSender.sendError(sessionId, ErrorCode.ROOM_ALREADY_PLAYING);
+            return false;
+        }
+        if (room.getCurrentPhaseData().size() < room.getPlayers().size()) {
+            gameResponseSender.sendError(sessionId, ErrorCode.NOT_ENOUGH_PLAYERS);
             return false;
         }
         return true;
@@ -315,33 +321,49 @@ public class GameFlowService {
             return;
         }
 
-        PlayerRole winnerRole;
-
-        if (room.isVotingDisabled() && room.getCurrentHp() > 0) {
-            winnerRole = PlayerRole.CITIZEN;
-        } else {
-            winnerRole = PlayerRole.TRAITOR;
-        }
+        PlayerRole winnerRole = (room.isVotingDisabled() && room.getCurrentHp() > 0)
+                ? PlayerRole.CITIZEN : PlayerRole.TRAITOR;
 
         room.setStatus(RoomStatus.GAME_OVER);
+        room.clearPhaseData();
         roomRepository.saveRoom(room);
 
         gameResponseSender.broadcastGameOver(room, winnerRole);
         gameLogService.saveGameLogAsync(room, winnerRole.name());
 
-        taskScheduler.schedule(() -> cleanupGameOverRoom(room.getRoomId()), Instant.now().plusSeconds(60));
+        taskScheduler.schedule(() -> cleanupGameOverRoom(room.getRoomId()), Instant.now().plusSeconds(gameProperties.gameOverCleanupTime()));
 
         log.info("게임 종료 처리 완료: room={}, winner={}", room.getRoomId(), winnerRole);
     }
 
     public void cleanupGameOverRoom(String roomId) {
-        lockFacade.execute(roomId, () -> {
+        LockResult<List<String>> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && room.getStatus() == RoomStatus.GAME_OVER) {
+            if (room == null) return null;
+
+            if (room.getStatus() == RoomStatus.GAME_OVER) {
                 roomRepository.deleteRoom(roomId, room.getRoomCode());
-                log.info("타임아웃된 방 강제 청소 완료: {}", roomId);
+                log.info("아무도 복귀하지 않아 방 삭제: {}", roomId);
+                return null;
             }
+
+            List<String> toKick = new ArrayList<>();
+            if (room.getStatus() == RoomStatus.WAITING) {
+                for (Player p : room.getPlayers()) {
+                    if (!room.getCurrentPhaseData().containsKey(p.getSessionId())) {
+                        toKick.add(p.getSessionId());
+                    }
+                }
+            }
+            return toKick;
         });
+
+        if (result.isSuccess() && result.getData() != null) {
+            for (String sessionId : result.getData()) {
+                eventPublisher.publishEvent(new GameUserTimeoutEvent(sessionId));
+                log.info("미복귀 유저 강퇴 이벤트 발행: {}", sessionId);
+            }
+        }
     }
 
     public void backToRoom(String sessionId) {
@@ -349,9 +371,12 @@ public class GameFlowService {
         if (roomId == null) return;
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && room.getStatus() == RoomStatus.GAME_OVER) {
-                room.resetForNewGame();
-                roomRepository.addWaitingRoom(roomId);
+            if (room != null && (room.getStatus() == RoomStatus.GAME_OVER || room.getStatus() == RoomStatus.WAITING)) {
+                room.getCurrentPhaseData().put(sessionId, "1");
+                if (room.getStatus() == RoomStatus.GAME_OVER) {
+                    room.resetForNewGame();
+                    roomRepository.addWaitingRoom(roomId);
+                }
                 roomRepository.saveRoom(room);
                 lobbyResponseSender.broadcastLobbyUpdate(room);
             }

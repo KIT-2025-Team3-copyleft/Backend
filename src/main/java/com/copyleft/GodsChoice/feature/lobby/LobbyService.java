@@ -5,6 +5,7 @@ import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
 import com.copyleft.GodsChoice.domain.type.PlayerColor;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
+import com.copyleft.GodsChoice.feature.game.event.GameUserTimeoutEvent;
 import com.copyleft.GodsChoice.feature.lobby.dto.LobbyPayloads;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.global.util.RandomUtil;
@@ -13,6 +14,7 @@ import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -30,6 +32,10 @@ public class LobbyService {
 
     private final LobbyResponseSender responseSender;
 
+    @EventListener
+    public void handleGameUserTimeout(GameUserTimeoutEvent event) {
+        leaveRoom(event.getSessionId());
+    }
 
     public void createRoom(String sessionId) {
         String nickname = nicknameRepository.getNicknameBySessionId(sessionId);
@@ -144,6 +150,7 @@ public class LobbyService {
             room.addPlayer(newPlayer);
             roomRepository.saveRoom(room);
             roomRepository.saveSessionRoomMapping(sessionId, roomId);
+            room.getCurrentPhaseData().put(sessionId, "NEW");
 
             if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
                 roomRepository.removeWaitingRoom(roomId);

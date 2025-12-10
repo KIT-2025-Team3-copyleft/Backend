@@ -124,8 +124,6 @@ public class Room {
         this.oracle = null;
         this.votingDisabled = false;
 
-        this.currentPhaseData.clear();
-
         if (this.players != null) {
             for (Player p : this.players) {
                 p.setRole(null);
