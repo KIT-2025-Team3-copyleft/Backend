@@ -53,6 +53,7 @@ public class LobbyService {
 
         Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
 
+        room.getCurrentPhaseData().put(sessionId, "HOST");
         roomRepository.saveRoom(room);
         roomRepository.saveSessionRoomMapping(sessionId, roomId);
         roomRepository.saveRoomCodeMapping(roomCode, roomId);
@@ -191,6 +192,7 @@ public class LobbyService {
 
             boolean wasHost = sessionId.equals(room.getHostSessionId());
 
+            room.getCurrentPhaseData().remove(sessionId);
             room.removePlayer(sessionId);
             roomRepository.deleteSessionRoomMapping(sessionId);
             responseSender.sendLeaveSuccess(sessionId);

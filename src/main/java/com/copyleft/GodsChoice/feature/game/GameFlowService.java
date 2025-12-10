@@ -98,9 +98,11 @@ public class GameFlowService {
             gameResponseSender.sendError(sessionId, ErrorCode.ROOM_ALREADY_PLAYING);
             return false;
         }
-        if (room.getCurrentPhaseData().size() < room.getPlayers().size()) {
-            gameResponseSender.sendError(sessionId, ErrorCode.NOT_ENOUGH_PLAYERS);
-            return false;
+        for (Player p : room.getPlayers()) {
+            if (!room.getCurrentPhaseData().containsKey(p.getSessionId())) {
+                gameResponseSender.sendError(sessionId, ErrorCode.NOT_ENOUGH_PLAYERS);
+                return false;
+            }
         }
         return true;
     }
@@ -372,7 +374,7 @@ public class GameFlowService {
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room != null && (room.getStatus() == RoomStatus.GAME_OVER || room.getStatus() == RoomStatus.WAITING)) {
-                room.getCurrentPhaseData().put(sessionId, "1");
+                room.getCurrentPhaseData().put(sessionId, "RETURNED");
                 if (room.getStatus() == RoomStatus.GAME_OVER) {
                     room.resetForNewGame();
                     roomRepository.addWaitingRoom(roomId);
