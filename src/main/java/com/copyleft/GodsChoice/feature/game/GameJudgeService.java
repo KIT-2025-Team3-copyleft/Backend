@@ -161,6 +161,8 @@ public class GameJudgeService {
                 );
             } else {
                 gameResponseSender.broadcastVoteProposalFailed(room);
+                room.changePhase(null);
+                roomRepository.saveRoom(room);
                 taskScheduler.schedule(
                         () -> eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.VOTE_PROPOSAL_FAILED)),
                         Instant.now().plusSeconds(gameProperties.voteFailDelay())
@@ -190,6 +192,8 @@ public class GameJudgeService {
 
             if (targetId == null) {
                 log.info("투표 무효 (동점 또는 득표 없음): room={}", roomId);
+                room.changePhase(GamePhase.TRIAL_RESULT);
+                roomRepository.saveRoom(room);
                 gameResponseSender.broadcastTrialResult(room, false, "무효(동점)", PlayerRole.CITIZEN);
 
                 taskScheduler.schedule(
