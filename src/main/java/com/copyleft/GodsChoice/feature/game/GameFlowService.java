@@ -309,12 +309,15 @@ public class GameFlowService {
     // 게임 종료 및 기타
 
     public void processGameOver(String roomId) {
-        lockFacade.execute(roomId, () -> {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
             processGameOverInternal(room);
         });
+        if (result.isLockFailed()) {
+            taskScheduler.schedule(() -> processGameOver(roomId), Instant.now().plusMillis(200));
+        }
     }
 
     private void processGameOverInternal(Room room) {
