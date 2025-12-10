@@ -149,9 +149,9 @@ public class LobbyService {
                     .build();
 
             room.addPlayer(newPlayer);
+            room.getCurrentPhaseData().put(sessionId, "NEW");
             roomRepository.saveRoom(room);
             roomRepository.saveSessionRoomMapping(sessionId, roomId);
-            room.getCurrentPhaseData().put(sessionId, "NEW");
 
             if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
                 roomRepository.removeWaitingRoom(roomId);
