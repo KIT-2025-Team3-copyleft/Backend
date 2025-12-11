@@ -5,12 +5,13 @@ import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
 import com.copyleft.GodsChoice.domain.type.PlayerColor;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
+import com.copyleft.GodsChoice.feature.game.GameRoomLockFacade;
+import com.copyleft.GodsChoice.feature.game.LockResult;
 import com.copyleft.GodsChoice.feature.game.event.GameUserTimeoutEvent;
 import com.copyleft.GodsChoice.feature.lobby.dto.LobbyPayloads;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.global.util.RandomUtil;
 import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
-import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +29,7 @@ public class LobbyService {
 
     private final RoomRepository roomRepository;
     private final NicknameRepository nicknameRepository;
-    private final RedisLockRepository redisLockRepository;
+    private final GameRoomLockFacade lockFacade;
 
     private final LobbyResponseSender responseSender;
 
@@ -112,13 +113,7 @@ public class LobbyService {
 
     private void joinRoomInternal(String sessionId, String roomId) {
 
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) {
-            responseSender.sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
-            return;
-        }
-
-        try {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
             if (roomOpt.isEmpty()) {
                 responseSender.sendError(sessionId, ErrorCode.ROOM_NOT_FOUND);
@@ -161,9 +156,10 @@ public class LobbyService {
             responseSender.broadcastLobbyUpdate(room);
 
             log.info("방 입장 완료: room={}, player={}", roomId, nickname);
+        });
 
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+        if (result.isLockFailed()) {
+            responseSender.sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
         }
     }
     
@@ -175,13 +171,7 @@ public class LobbyService {
             return;
         }
 
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) {
-            responseSender.sendError(sessionId, ErrorCode.ROOM_LEAVE_FAILED);
-            return;
-        }
-
-        try {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
             if (roomOpt.isEmpty()) {
                 roomRepository.deleteSessionRoomMapping(sessionId);
@@ -224,8 +214,10 @@ public class LobbyService {
 
             log.info("방 퇴장 처리 완료: session={}, room={}", sessionId, roomId);
 
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+        });
+
+        if (result.isLockFailed()) {
+            responseSender.sendError(sessionId, ErrorCode.ROOM_LEAVE_FAILED);
         }
     }
 }

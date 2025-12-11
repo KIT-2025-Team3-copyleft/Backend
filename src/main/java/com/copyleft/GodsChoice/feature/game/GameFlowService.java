@@ -157,7 +157,7 @@ public class GameFlowService {
     // 라운드 진행 흐름
 
     public void startOraclePhase(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() == GamePhase.ORACLE) return;
 
@@ -174,10 +174,6 @@ public class GameFlowService {
 
             taskScheduler.schedule(() -> startRound(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
         });
-
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     public void startRound(String roomId) {
@@ -197,10 +193,7 @@ public class GameFlowService {
             roomRepository.saveRoom(room);
             final int currentRound = room.getCurrentRound();
 
-            // 카드 전송 예약
             taskScheduler.schedule(() -> sendCardsDelayed(roomId), Instant.now().plusSeconds(gameProperties.cardSendDelay()));
-
-            // 타임아웃 예약
             taskScheduler.schedule(() -> gameJudgeService.processCardTimeout(roomId, currentRound),
                     Instant.now().plusSeconds(gameProperties.cardSendDelay() + gameProperties.cardSelectTime()));
 
@@ -238,7 +231,7 @@ public class GameFlowService {
     }
 
     public void startVoteProposal(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
@@ -256,14 +249,10 @@ public class GameFlowService {
             int currentRound = room.getCurrentRound();
             taskScheduler.schedule(() -> gameJudgeService.processVoteProposalEnd(roomId, currentRound), Instant.now().plusSeconds(gameProperties.voteProposalTime()));
         });
-
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> startVoteProposal(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     public void startTrialInternal(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
@@ -276,13 +265,10 @@ public class GameFlowService {
             int currentRound = room.getCurrentRound();
             taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(roomId, currentRound), Instant.now().plusSeconds(gameProperties.trialTime()));
         });
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> startTrialInternal(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     public void startNextRound(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
@@ -299,25 +285,17 @@ public class GameFlowService {
                 taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
             }
         });
-
-        if (result.isLockFailed()) {
-            log.info("락 획득 실패 (NextRound): {}, 재시도합니다.", roomId);
-            taskScheduler.schedule(() -> startNextRound(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     // 게임 종료 및 기타
 
     public void processGameOver(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
             processGameOverInternal(room);
         });
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> processGameOver(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     private void processGameOverInternal(Room room) {
