@@ -1,11 +1,16 @@
 package com.copyleft.GodsChoice.infra.websocket;
 
+import com.copyleft.GodsChoice.infra.websocket.dto.ClusterMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RTopic;
+import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+
 
 import java.io.IOException;
 
@@ -16,23 +21,53 @@ public class WebSocketSender {
 
     private final WebSocketSessionManager sessionManager;
     private final ObjectMapper objectMapper;
+    private final RedissonClient redissonClient;
+
+    private static final String TOPIC_NAME = "ws-cluster-topic";
+
+    @PostConstruct
+    public void init() {
+        RTopic topic = redissonClient.getTopic(TOPIC_NAME);
+
+        topic.addListener(ClusterMessage.class, (channel, msg) -> {
+            try {
+                sendLocal(msg.getSessionId(), msg.getContent());
+            } catch (Exception e) {
+                log.error("Cluster 메시지 처리 중 오류", e);
+            }
+        });
+        log.info("Redis Pub/Sub 구독 시작: Topic={}", TOPIC_NAME);
+    }
 
     public void sendEventToSession(String sessionId, Object event) {
-        WebSocketSession session = sessionManager.getSession(sessionId);
-        if (session != null && session.isOpen()) {
-            try {
-                String payload = objectMapper.writeValueAsString(event); // 객체를 JSON 문자열로 변환
-                session.sendMessage(new TextMessage(payload));
-                log.debug("이벤트 전송 (1:1): [세션 ID: {}], [페이로드: {}]", sessionId, payload);
-            } catch (IOException e) {
-                log.error("1:1 이벤트 전송 실패: [세션 ID: {}], [오류: {}]", sessionId, e.getMessage());
+        try {
+            String payload = objectMapper.writeValueAsString(event);
+
+            if (sessionManager.getSession(sessionId) != null) {
+                sendLocal(sessionId, payload);
             }
-        } else {
-            log.warn("세션을 찾을 수 없거나 닫혀있습니다: [세션 ID: {}]", sessionId);
+            else {
+                publishToCluster(sessionId, payload);
+            }
+        } catch (IOException e) {
+            log.error("메시지 변환/전송 실패: session={}", sessionId, e);
         }
     }
 
-    public void broadcastEventToRoom(String roomId, Object event) {
-        log.debug("이벤트 브로드캐스트 (1:N): [방 ID: {}], [이벤트: {}]", roomId, event.getClass().getSimpleName());
+    private void sendLocal(String sessionId, String payload) {
+        WebSocketSession session = sessionManager.getSession(sessionId);
+        if (session != null && session.isOpen()) {
+            try {
+                session.sendMessage(new TextMessage(payload));
+                log.debug("전송 성공 (Local): {}", sessionId);
+            } catch (IOException e) {
+                log.error("전송 실패 (Local): {}", sessionId, e);
+            }
+        }
+    }
+
+    private void publishToCluster(String sessionId, String payload) {
+        RTopic topic = redissonClient.getTopic(TOPIC_NAME);
+        topic.publish(new ClusterMessage(sessionId, payload));
     }
 }
