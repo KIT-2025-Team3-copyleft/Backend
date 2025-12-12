@@ -9,6 +9,7 @@ import com.copyleft.GodsChoice.domain.type.RoomStatus;
 import com.copyleft.GodsChoice.feature.game.GameRoomLockFacade;
 import com.copyleft.GodsChoice.feature.game.LockResult;
 import com.copyleft.GodsChoice.feature.game.event.GameUserTimeoutEvent;
+import com.copyleft.GodsChoice.feature.game.event.PlayerLeftEvent;
 import com.copyleft.GodsChoice.feature.lobby.dto.LobbyPayloads;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.global.util.RandomUtil;
@@ -16,6 +17,7 @@ import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +34,7 @@ public class LobbyService {
     private final GameRoomLockFacade lockFacade;
     private final GameProperties gameProperties;
     private final LobbyResponseSender responseSender;
+    private final ApplicationEventPublisher eventPublisher;
 
     @EventListener
     public void handleGameUserTimeout(GameUserTimeoutEvent event) {
@@ -229,6 +232,7 @@ public class LobbyService {
             roomRepository.saveRoom(room);
             responseSender.broadcastLobbyUpdate(room);
 
+            eventPublisher.publishEvent(new PlayerLeftEvent(roomId, sessionId));
             log.info("방 퇴장 처리 완료: session={}, room={}", sessionId, roomId);
 
         });

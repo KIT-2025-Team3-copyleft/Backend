@@ -7,11 +7,13 @@ import com.copyleft.GodsChoice.domain.type.*;
 import com.copyleft.GodsChoice.domain.vo.AiJudgment;
 import com.copyleft.GodsChoice.feature.game.dto.GamePayloads;
 import com.copyleft.GodsChoice.feature.game.event.GameDecisionEvent;
+import com.copyleft.GodsChoice.feature.game.event.PlayerLeftEvent;
 import com.copyleft.GodsChoice.infra.external.GroqApiClient;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +41,48 @@ public class GameJudgeService {
             GodPersonality personality,
             Oracle oracle
     ) {}
+
+    @EventListener
+    public void handlePlayerLeft(PlayerLeftEvent event) {
+        String roomId = event.getRoomId();
+
+        lockFacade.execute(roomId, () -> {
+            roomRepository.findRoomById(roomId).ifPresent(this::checkPhaseFinishCondition);
+        });
+    }
+
+    private void checkPhaseFinishCondition(Room room) {
+        if (room.getStatus() != RoomStatus.PLAYING) return;
+
+        GamePhase phase = room.getCurrentPhase();
+        if (phase == null) return;
+
+        int currentPlayers = room.getPlayers().size();
+        int actionCount = room.getActionCount();
+
+        switch (phase) {
+            case CARD_SELECT:
+                if (room.isAllPlayersSelectedCard()) {
+                    log.info("퇴장으로 인한 카드 선택 완료");
+                    judgeRound(room.getRoomId());
+                }
+                break;
+            case VOTE_PROPOSAL:
+                if (actionCount >= currentPlayers) {
+                    log.info("퇴장으로 인한 찬반 투표 조기 종료");
+                    judgeVoteProposalEndImmediately(room.getRoomId());
+                }
+                break;
+            case TRIAL_VOTE:
+                if (actionCount >= currentPlayers) {
+                    log.info("퇴장으로 인한 이단 심문 투표 조기 종료");
+                    judgeTrialEndImmediately(room.getRoomId());
+                }
+                break;
+            default:
+                break;
+        }
+    }
 
 
     // AI 심판
