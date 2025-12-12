@@ -19,7 +19,7 @@ game:
     round-result-duration: 60 #ROUND_RESULT_DURATION_SECONDS
     next-round-delay: 3
     vote-fail-delay: 1
-    game-over-cleanup-time: 20
+    game-over-cleanup-time: 30
 
     # 룰
     card-count : 8 #CARD_COUNT

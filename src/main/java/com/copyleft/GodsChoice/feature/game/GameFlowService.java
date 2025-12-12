@@ -272,7 +272,7 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
-            if (room.getCurrentRound() >= 4) {
+            if (room.getCurrentRound() >= gameProperties.maxRounds()) {
                 taskScheduler.schedule(() -> processGameOver(roomId), Instant.now());
             } else {
                 room.changePhase(null);
@@ -324,21 +324,24 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return null;
 
-            if (room.getStatus() == RoomStatus.GAME_OVER) {
-                roomRepository.deleteRoom(roomId, room.getRoomCode());
-                log.info("아무도 복귀하지 않아 방 삭제: {}", roomId);
-                return null;
+            if (room.getStatus() == RoomStatus.WAITING) {
+                return getPlayersToKick(room);
             }
 
-            List<String> toKick = new ArrayList<>();
-            if (room.getStatus() == RoomStatus.WAITING) {
-                for (Player p : room.getPlayers()) {
-                    if (!room.getCurrentPhaseData().containsKey(p.getSessionId())) {
-                        toKick.add(p.getSessionId());
-                    }
+            if (room.getStatus() == RoomStatus.GAME_OVER) {
+                boolean anyoneReturning = room.getCurrentPhaseData().containsValue("RETURNED");
+
+                if (anyoneReturning) {
+                    log.info("타임아웃 -> 복귀 희망자 대리고 대기방 전환: {}", roomId);
+                    resetRoomToWaiting(room);
+                    return getPlayersToKick(room);
+                } else {
+                    roomRepository.deleteRoom(roomId, room.getRoomCode());
+                    log.info("타임아웃 -> 복귀 유저 없음, 방 삭제: {}", roomId);
+                    return null;
                 }
             }
-            return toKick;
+            return null;
         });
 
         if (result.isSuccess() && result.getData() != null) {
@@ -354,15 +357,43 @@ public class GameFlowService {
         if (roomId == null) return;
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && (room.getStatus() == RoomStatus.GAME_OVER || room.getStatus() == RoomStatus.WAITING)) {
+            if (room != null && room.getStatus() == RoomStatus.GAME_OVER) {
                 room.getCurrentPhaseData().put(sessionId, "RETURNED");
-                if (room.getStatus() == RoomStatus.GAME_OVER) {
-                    room.resetForNewGame();
-                    roomRepository.addWaitingRoom(roomId);
-                }
                 roomRepository.saveRoom(room);
-                lobbyResponseSender.broadcastLobbyUpdate(room);
+                log.info("유저 복귀 선택: session={}, room={}", sessionId, roomId);
+
+                long connectedCount = room.getPlayers().stream()
+                        .filter(p -> p.getConnectionStatus() == ConnectionStatus.CONNECTED)
+                        .count();
+
+                long returnedCount = room.getCurrentPhaseData().values().stream()
+                        .filter(v -> "RETURNED".equals(v))
+                        .count();
+
+                if (connectedCount > 0 && returnedCount >= connectedCount) {
+                    log.info("전원 복귀 선택 완료 -> 즉시 대기방 전환: {}", roomId);
+                    resetRoomToWaiting(room);
+                }
             }
         });
+    }
+
+    private void resetRoomToWaiting(Room room) {
+        room.resetForNewGame();
+        room.setStatus(RoomStatus.WAITING);
+        roomRepository.addWaitingRoom(room.getRoomId());
+        roomRepository.saveRoom(room);
+
+        lobbyResponseSender.broadcastLobbyUpdate(room);
+    }
+
+    private List<String> getPlayersToKick(Room room) {
+        List<String> toKick = new ArrayList<>();
+        for (Player p : room.getPlayers()) {
+            if (!"RETURNED".equals(room.getCurrentPhaseData().get(p.getSessionId()))) {
+                toKick.add(p.getSessionId());
+            }
+        }
+        return toKick;
     }
 }
