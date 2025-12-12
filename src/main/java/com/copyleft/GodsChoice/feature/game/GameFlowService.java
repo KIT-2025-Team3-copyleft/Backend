@@ -8,6 +8,7 @@ import com.copyleft.GodsChoice.feature.game.event.GameDecisionEvent;
 import com.copyleft.GodsChoice.feature.game.event.GameUserTimeoutEvent;
 import com.copyleft.GodsChoice.feature.lobby.LobbyResponseSender;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
+import com.copyleft.GodsChoice.global.util.RandomUtil;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -90,7 +91,7 @@ public class GameFlowService {
             gameResponseSender.sendError(sessionId, ErrorCode.NOT_HOST);
             return false;
         }
-        if (room.getPlayers().size() < Room.MAX_PLAYER_COUNT) {
+        if (room.getPlayers().size() < gameProperties.maxPlayerCount()) {
             gameResponseSender.sendError(sessionId, ErrorCode.NOT_ENOUGH_PLAYERS);
             return false;
         }
@@ -112,7 +113,7 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getStatus() != RoomStatus.STARTING) return;
 
-            if (room.getPlayers().size() < Room.MAX_PLAYER_COUNT) {
+            if (room.getPlayers().size() < gameProperties.maxPlayerCount()) {
                 log.warn("게임 시작 실패 (인원 부족): {}", roomId);
                 cancelGameStart(room);
                 return;
@@ -379,7 +380,8 @@ public class GameFlowService {
     }
 
     private void resetRoomToWaiting(Room room) {
-        room.resetForNewGame();
+        int randomHp = RandomUtil.generateRandomHp(gameProperties.minInitialHp(), gameProperties.maxInitialHp());
+        room.resetForNewGame(randomHp);
         room.setStatus(RoomStatus.WAITING);
         roomRepository.addWaitingRoom(room.getRoomId());
         roomRepository.saveRoom(room);

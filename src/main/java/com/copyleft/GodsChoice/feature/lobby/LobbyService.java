@@ -54,9 +54,7 @@ public class LobbyService {
 
         Player host = Player.createHost(sessionId, nickname);
         host.setColor(PlayerColor.RED);
-        int minHp = gameProperties.minInitialHp();
-        int maxHp = gameProperties.maxInitialHp();
-        int randomHp = new Random().nextInt(maxHp - minHp + 1) + minHp;
+        int randomHp = RandomUtil.generateRandomHp(gameProperties.minInitialHp(), gameProperties.maxInitialHp());
 
         Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host, randomHp);
 
@@ -89,7 +87,7 @@ public class LobbyService {
 
         List<Room> availableRooms = waitingRooms.stream()
                 .filter(r -> r.getStatus() == RoomStatus.WAITING)
-                .filter(r -> r.getPlayers().size() < Room.MAX_PLAYER_COUNT)
+                .filter(r -> r.getPlayers().size() < gameProperties.maxPlayerCount())
                 .toList();
 
         if (availableRooms.isEmpty()) {
@@ -100,13 +98,13 @@ public class LobbyService {
         Map<Integer, List<Room>> roomsByCount = availableRooms.stream()
                 .collect(Collectors.groupingBy(r -> r.getPlayers().size()));
 
-        for (int i = Room.MAX_PLAYER_COUNT - 1; i >= 0; i--) {
+        for (int i = gameProperties.maxPlayerCount() - 1; i >= 0; i--) {
             List<Room> candidates = roomsByCount.get(i);
 
             if (candidates != null && !candidates.isEmpty()) {
                 Collections.shuffle(candidates);
 
-                joinRoomInternal(sessionId, candidates.get(0).getRoomId());
+                joinRoomInternal(sessionId, candidates.getFirst().getRoomId());
                 return;
             }
         }
@@ -123,7 +121,7 @@ public class LobbyService {
                         .roomId(r.getRoomId())
                         .roomTitle(r.getRoomTitle())
                         .currentCount(r.getPlayers().size())
-                        .maxCount(Room.MAX_PLAYER_COUNT)
+                        .maxCount(gameProperties.maxPlayerCount())
                         .isPlaying(false)
                         .build())
                 .collect(Collectors.toList());
@@ -142,7 +140,7 @@ public class LobbyService {
             }
             Room room = roomOpt.get();
 
-            if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
+            if (room.getPlayers().size() >= gameProperties.maxPlayerCount()) {
                 responseSender.sendError(sessionId, ErrorCode.ROOM_FULL);
                 roomRepository.removeWaitingRoom(roomId);
                 return;
@@ -168,7 +166,7 @@ public class LobbyService {
             roomRepository.saveRoom(room);
             roomRepository.saveSessionRoomMapping(sessionId, roomId);
 
-            if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
+            if (room.getPlayers().size() >= gameProperties.maxPlayerCount()) {
                 roomRepository.removeWaitingRoom(roomId);
             }
 
