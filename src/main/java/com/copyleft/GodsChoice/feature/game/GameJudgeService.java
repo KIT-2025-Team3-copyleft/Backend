@@ -39,7 +39,8 @@ public class GameJudgeService {
             String fullSentence,
             List<GamePayloads.SentencePart> parts,
             GodPersonality personality,
-            Oracle oracle
+            Oracle oracle,
+            int round
     ) {}
 
     @EventListener
@@ -108,7 +109,7 @@ public class GameJudgeService {
                     ? room.getOracle()
                     : Oracle.VITALITY;
 
-            return new AiPromptData(fullSentence, parts, personality, oracle);
+            return new AiPromptData(fullSentence, parts, personality, oracle, room.getCurrentRound());
         });
 
         if (result.isSkipped() || !result.isSuccess()) return;
@@ -116,13 +117,17 @@ public class GameJudgeService {
         AiPromptData promptData = result.getData();
         AiJudgment judgment = groqApiClient.judgeSentence(promptData.fullSentence(), promptData.personality(), promptData.oracle());
 
-        applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.parts(), promptData.fullSentence());
+        applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.parts(), promptData.fullSentence(), promptData.round);
     }
 
-    private void applyJudgmentResult(String roomId, int score, String reason, List<GamePayloads.SentencePart> parts, String fullSentence) {
+    private void applyJudgmentResult(String roomId, int score, String reason, List<GamePayloads.SentencePart> parts, String fullSentence, int targetRound) {
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getStatus() == RoomStatus.GAME_OVER) return;
+
+            if (room.getCurrentRound() != targetRound || room.getCurrentPhase() != GamePhase.JUDGING) {
+                return;
+            }
 
             room.adjustHp(score);
             roomRepository.saveRoom(room);
