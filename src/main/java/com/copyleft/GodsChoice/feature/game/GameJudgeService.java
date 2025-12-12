@@ -54,10 +54,7 @@ public class GameJudgeService {
 
     private void checkPhaseFinishCondition(Room room) {
         if (room.getStatus() != RoomStatus.PLAYING) return;
-
-        if (room.getPlayers().isEmpty()) {
-            return;
-        }
+        if (room.getPlayers().isEmpty()) return;
 
         GamePhase phase = room.getCurrentPhase();
         if (phase == null) return;
@@ -121,7 +118,7 @@ public class GameJudgeService {
         AiPromptData promptData = result.getData();
         AiJudgment judgment = groqApiClient.judgeSentence(promptData.fullSentence(), promptData.personality(), promptData.oracle());
 
-        applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.parts(), promptData.fullSentence(), promptData.round);
+        applyJudgmentResult(roomId, judgment.score(), judgment.reason(), promptData.parts(), promptData.fullSentence(), promptData.round());
     }
 
     private void applyJudgmentResult(String roomId, int score, String reason, List<GamePayloads.SentencePart> parts, String fullSentence, int targetRound) {
