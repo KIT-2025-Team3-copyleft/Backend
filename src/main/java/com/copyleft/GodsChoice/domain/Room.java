@@ -66,7 +66,7 @@ public class Room {
         }
     }
 
-    public static Room create(String roomId, String roomCode, String roomTitle, String hostSessionId, Player hostPlayer) {
+    public static Room create(String roomId, String roomCode, String roomTitle, String hostSessionId, Player hostPlayer, int initialHp) {
 
         Room room = Room.builder()
                 .roomId(roomId)
@@ -74,7 +74,7 @@ public class Room {
                 .roomTitle(roomTitle)
                 .hostSessionId(hostSessionId)
                 .status(RoomStatus.WAITING)
-                .currentHp(1000)
+                .currentHp(initialHp)
                 .currentRound(1)
                 .votingDisabled(false)
                 .createdAt(System.currentTimeMillis())
@@ -93,7 +93,7 @@ public class Room {
             p.setHost(false);
         }
 
-        Player newHost = this.players.get(0);
+        Player newHost = this.players.getFirst();
         newHost.setHost(true);
 
         this.hostSessionId = newHost.getSessionId();

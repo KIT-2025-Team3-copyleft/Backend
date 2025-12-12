@@ -1,5 +1,6 @@
 package com.copyleft.GodsChoice.feature.lobby;
 
+import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
@@ -18,10 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -32,7 +30,7 @@ public class LobbyService {
     private final RoomRepository roomRepository;
     private final NicknameRepository nicknameRepository;
     private final GameRoomLockFacade lockFacade;
-
+    private final GameProperties gameProperties;
     private final LobbyResponseSender responseSender;
 
     @EventListener
@@ -53,8 +51,11 @@ public class LobbyService {
 
         Player host = Player.createHost(sessionId, nickname);
         host.setColor(PlayerColor.RED);
+        int minHp = gameProperties.minInitialHp();
+        int maxHp = gameProperties.maxInitialHp();
+        int randomHp = new Random().nextInt(maxHp - minHp + 1) + minHp;
 
-        Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
+        Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host, randomHp);
 
         room.getCurrentPhaseData().put(sessionId, "HOST");
         roomRepository.saveRoom(room);
