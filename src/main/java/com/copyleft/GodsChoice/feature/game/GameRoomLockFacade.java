@@ -25,17 +25,16 @@ public class GameRoomLockFacade {
         return executeInternal(roomId, () -> {
             action.run();
             return null;
-        });
+        }, true);
     }
 
     public <T> LockResult<T> execute(String roomId, Supplier<T> action) {
-        return executeInternal(roomId, action);
+        return executeInternal(roomId, action, false);
     }
 
-    private <T> LockResult<T> executeInternal(String roomId, Supplier<T> action) {
+    private <T> LockResult<T> executeInternal(String roomId, Supplier<T> action, boolean allowNullSuccess) {
         RLock lock = redissonClient.getLock("room-lock:" + roomId);
 
-        // 최대 N번 반복 시도
         for (int i = 0; i < MAX_RETRY; i++) {
             try {
                 boolean available = lock.tryLock(WAIT_TIME, LEASE_TIME, TimeUnit.SECONDS);
@@ -43,7 +42,10 @@ public class GameRoomLockFacade {
                 if (available) {
                     try {
                         T result = action.get();
-                        return (result == null) ? LockResult.skipped() : LockResult.success(result);
+                        if (result == null && !allowNullSuccess) {
+                            return LockResult.skipped();
+                        }
+                        return LockResult.success(result);
                     } finally {
                         if (lock.isHeldByCurrentThread()) {
                             lock.unlock();
