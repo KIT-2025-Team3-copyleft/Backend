@@ -25,7 +25,7 @@ game:
     card-count : 8 #CARD_COUNT
     min-initial-hp: 0
     max-initial-hp: 200
-    max-rounds: 4
+    max-rounds: 2
     max-player-count: 4
 
     # 닉네임
