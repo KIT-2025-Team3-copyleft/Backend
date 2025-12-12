@@ -54,11 +54,6 @@ public class ChatService {
             return;
         }
 
-        if (isChatBlocked(room.getCurrentPhase())) {
-            chatResponseSender.sendError(sessionId, ErrorCode.CHAT_BLOCKED_PHASE.name(), ErrorCode.CHAT_BLOCKED_PHASE.getMessage());
-            return;
-        }
-
         String colorCode = sender.getColor() != null ? sender.getColor().name() : "UNKNOWN";
         String formattedMessage = String.format(CHAT_FORMAT, sender.getNickname(), colorCode, message);
 
@@ -72,10 +67,5 @@ public class ChatService {
         chatResponseSender.broadcastChat(room, chatData);
 
         log.info("채팅 전송: room={}, sender={}, msg={}", roomId, sender.getNickname(), message);
-    }
-
-    private boolean isChatBlocked(GamePhase phase) {
-        if (phase == null) return false;
-        return phase == GamePhase.CARD_SELECT || phase == GamePhase.TRIAL_VOTE;
     }
 }

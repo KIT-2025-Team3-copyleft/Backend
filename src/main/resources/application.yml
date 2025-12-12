@@ -9,21 +9,23 @@ game:
   rule:
     # 시간 (초)
     start-delay: 3 #GAME_START_DELAY_SECONDS = 3;
-    loading-timeout: 5 #LOADING_TIMEOUT_SECONDS
-    oracle-phase: 8 #ORACLE_PHASE_SECONDS
-    card-send-delay: 3 #CARD_SEND_DELAY_SECONDS
-    card-select-time: 30 #CARD_SELECT_DURATION_SECONDS
-    vote-proposal-time: 30 #VOTE_PROPOSAL_SECONDS
-    trial-time: 30 #TRIAL_DURATION_SECONDS
-    round-result-duration: 35 #ROUND_RESULT_DURATION_SECONDS
-    next-round-delay: 5
-    vote-fail-delay: 3
-    game-over-cleanup-time: 60
+    loading-timeout: 1 #LOADING_TIMEOUT_SECONDS
+    oracle-phase: 10 #ORACLE_PHASE_SECONDS
+    card-send-delay: 0 #CARD_SEND_DELAY_SECONDS
+    card-select-time: 120 #CARD_SELECT_DURATION_SECONDS
+    judge-delay: 5
+    vote-proposal-time: 60 #VOTE_PROPOSAL_SECONDS
+    trial-time: 120 #TRIAL_DURATION_SECONDS
+    round-result-duration: 60 #ROUND_RESULT_DURATION_SECONDS
+    next-round-delay: 3
+    vote-fail-delay: 1
+    game-over-cleanup-time: 30
 
     # 룰
     card-count : 8 #CARD_COUNT
-    max-rounds: 4
-    initial-hp: 500
+    min-initial-hp: 0
+    max-initial-hp: 200
+    max-rounds: 2
     max-player-count: 4
 
     # 닉네임

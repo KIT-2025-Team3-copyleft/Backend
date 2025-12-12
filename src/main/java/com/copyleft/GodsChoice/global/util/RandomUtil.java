@@ -26,4 +26,11 @@ public class RandomUtil {
         }
         return sb.toString();
     }
+
+    public static int generateRandomHp(int min, int max) {
+        if (min > max) {
+            throw new IllegalArgumentException("Max must be greater than Min");
+        }
+        return random.nextInt(max - min + 1) + min;
+    }
 }

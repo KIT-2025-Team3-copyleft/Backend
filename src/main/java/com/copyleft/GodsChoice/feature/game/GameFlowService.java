@@ -8,6 +8,7 @@ import com.copyleft.GodsChoice.feature.game.event.GameDecisionEvent;
 import com.copyleft.GodsChoice.feature.game.event.GameUserTimeoutEvent;
 import com.copyleft.GodsChoice.feature.lobby.LobbyResponseSender;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
+import com.copyleft.GodsChoice.global.util.RandomUtil;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -90,7 +91,7 @@ public class GameFlowService {
             gameResponseSender.sendError(sessionId, ErrorCode.NOT_HOST);
             return false;
         }
-        if (room.getPlayers().size() < Room.MAX_PLAYER_COUNT) {
+        if (room.getPlayers().size() < gameProperties.maxPlayerCount()) {
             gameResponseSender.sendError(sessionId, ErrorCode.NOT_ENOUGH_PLAYERS);
             return false;
         }
@@ -112,7 +113,7 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getStatus() != RoomStatus.STARTING) return;
 
-            if (room.getPlayers().size() < Room.MAX_PLAYER_COUNT) {
+            if (room.getPlayers().size() < gameProperties.maxPlayerCount()) {
                 log.warn("게임 시작 실패 (인원 부족): {}", roomId);
                 cancelGameStart(room);
                 return;
@@ -157,7 +158,7 @@ public class GameFlowService {
     // 라운드 진행 흐름
 
     public void startOraclePhase(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null || room.getCurrentPhase() == GamePhase.ORACLE) return;
 
@@ -174,10 +175,6 @@ public class GameFlowService {
 
             taskScheduler.schedule(() -> startRound(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
         });
-
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     public void startRound(String roomId) {
@@ -197,10 +194,7 @@ public class GameFlowService {
             roomRepository.saveRoom(room);
             final int currentRound = room.getCurrentRound();
 
-            // 카드 전송 예약
             taskScheduler.schedule(() -> sendCardsDelayed(roomId), Instant.now().plusSeconds(gameProperties.cardSendDelay()));
-
-            // 타임아웃 예약
             taskScheduler.schedule(() -> gameJudgeService.processCardTimeout(roomId, currentRound),
                     Instant.now().plusSeconds(gameProperties.cardSendDelay() + gameProperties.cardSelectTime()));
 
@@ -238,7 +232,7 @@ public class GameFlowService {
     }
 
     public void startVoteProposal(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
@@ -256,14 +250,10 @@ public class GameFlowService {
             int currentRound = room.getCurrentRound();
             taskScheduler.schedule(() -> gameJudgeService.processVoteProposalEnd(roomId, currentRound), Instant.now().plusSeconds(gameProperties.voteProposalTime()));
         });
-
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> startVoteProposal(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     public void startTrialInternal(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
@@ -276,17 +266,14 @@ public class GameFlowService {
             int currentRound = room.getCurrentRound();
             taskScheduler.schedule(() -> gameJudgeService.processTrialEnd(roomId, currentRound), Instant.now().plusSeconds(gameProperties.trialTime()));
         });
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> startTrialInternal(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     public void startNextRound(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
-            if (room.getCurrentRound() >= 4) {
+            if (room.getCurrentRound() >= gameProperties.maxRounds()) {
                 taskScheduler.schedule(() -> processGameOver(roomId), Instant.now());
             } else {
                 room.changePhase(null);
@@ -299,25 +286,17 @@ public class GameFlowService {
                 taskScheduler.schedule(() -> startOraclePhase(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
             }
         });
-
-        if (result.isLockFailed()) {
-            log.info("락 획득 실패 (NextRound): {}, 재시도합니다.", roomId);
-            taskScheduler.schedule(() -> startNextRound(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     // 게임 종료 및 기타
 
     public void processGameOver(String roomId) {
-        LockResult<Void> result = lockFacade.execute(roomId, () -> {
+        lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return;
 
             processGameOverInternal(room);
         });
-        if (result.isLockFailed()) {
-            taskScheduler.schedule(() -> processGameOver(roomId), Instant.now().plusMillis(200));
-        }
     }
 
     private void processGameOverInternal(Room room) {
@@ -346,21 +325,24 @@ public class GameFlowService {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
             if (room == null) return null;
 
-            if (room.getStatus() == RoomStatus.GAME_OVER) {
-                roomRepository.deleteRoom(roomId, room.getRoomCode());
-                log.info("아무도 복귀하지 않아 방 삭제: {}", roomId);
-                return null;
+            if (room.getStatus() == RoomStatus.WAITING) {
+                return getPlayersToKick(room);
             }
 
-            List<String> toKick = new ArrayList<>();
-            if (room.getStatus() == RoomStatus.WAITING) {
-                for (Player p : room.getPlayers()) {
-                    if (!room.getCurrentPhaseData().containsKey(p.getSessionId())) {
-                        toKick.add(p.getSessionId());
-                    }
+            if (room.getStatus() == RoomStatus.GAME_OVER) {
+                boolean anyoneReturning = room.getCurrentPhaseData().containsValue("RETURNED");
+
+                if (anyoneReturning) {
+                    log.info("타임아웃 -> 복귀 희망자 대리고 대기방 전환: {}", roomId);
+                    resetRoomToWaiting(room);
+                    return getPlayersToKick(room);
+                } else {
+                    roomRepository.deleteRoom(roomId, room.getRoomCode());
+                    log.info("타임아웃 -> 복귀 유저 없음, 방 삭제: {}", roomId);
+                    return null;
                 }
             }
-            return toKick;
+            return null;
         });
 
         if (result.isSuccess() && result.getData() != null) {
@@ -376,15 +358,44 @@ public class GameFlowService {
         if (roomId == null) return;
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room != null && (room.getStatus() == RoomStatus.GAME_OVER || room.getStatus() == RoomStatus.WAITING)) {
+            if (room != null && room.getStatus() == RoomStatus.GAME_OVER) {
                 room.getCurrentPhaseData().put(sessionId, "RETURNED");
-                if (room.getStatus() == RoomStatus.GAME_OVER) {
-                    room.resetForNewGame();
-                    roomRepository.addWaitingRoom(roomId);
-                }
                 roomRepository.saveRoom(room);
-                lobbyResponseSender.broadcastLobbyUpdate(room);
+                log.info("유저 복귀 선택: session={}, room={}", sessionId, roomId);
+
+                long connectedCount = room.getPlayers().stream()
+                        .filter(p -> p.getConnectionStatus() == ConnectionStatus.CONNECTED)
+                        .count();
+
+                long returnedCount = room.getCurrentPhaseData().values().stream()
+                        .filter(v -> "RETURNED".equals(v))
+                        .count();
+
+                if (connectedCount > 0 && returnedCount >= connectedCount) {
+                    log.info("전원 복귀 선택 완료 -> 즉시 대기방 전환: {}", roomId);
+                    resetRoomToWaiting(room);
+                }
             }
         });
+    }
+
+    private void resetRoomToWaiting(Room room) {
+        int randomHp = RandomUtil.generateRandomHp(gameProperties.minInitialHp(), gameProperties.maxInitialHp());
+        room.resetForNewGame(randomHp);
+        room.setStatus(RoomStatus.WAITING);
+        roomRepository.addWaitingRoom(room.getRoomId());
+        roomRepository.saveRoom(room);
+
+        lobbyResponseSender.broadcastLobbyUpdate(room);
+    }
+
+    private List<String> getPlayersToKick(Room room) {
+        List<String> toKick = new ArrayList<>();
+        for (Player p : room.getPlayers()) {
+            if (!"RETURNED".equals(room.getCurrentPhaseData().get(p.getSessionId()))) {
+                toKick.add(p.getSessionId());
+            }
+        }
+        return toKick;
     }
 }

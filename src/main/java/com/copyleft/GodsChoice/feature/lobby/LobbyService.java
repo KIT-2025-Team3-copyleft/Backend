@@ -1,24 +1,27 @@
 package com.copyleft.GodsChoice.feature.lobby;
 
+import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.ConnectionStatus;
 import com.copyleft.GodsChoice.domain.type.PlayerColor;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
+import com.copyleft.GodsChoice.feature.game.GameRoomLockFacade;
+import com.copyleft.GodsChoice.feature.game.LockResult;
 import com.copyleft.GodsChoice.feature.game.event.GameUserTimeoutEvent;
+import com.copyleft.GodsChoice.feature.game.event.PlayerLeftEvent;
 import com.copyleft.GodsChoice.feature.lobby.dto.LobbyPayloads;
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
 import com.copyleft.GodsChoice.global.util.RandomUtil;
 import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
-import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,9 +31,10 @@ public class LobbyService {
 
     private final RoomRepository roomRepository;
     private final NicknameRepository nicknameRepository;
-    private final RedisLockRepository redisLockRepository;
-
+    private final GameRoomLockFacade lockFacade;
+    private final GameProperties gameProperties;
     private final LobbyResponseSender responseSender;
+    private final ApplicationEventPublisher eventPublisher;
 
     @EventListener
     public void handleGameUserTimeout(GameUserTimeoutEvent event) {
@@ -50,8 +54,9 @@ public class LobbyService {
 
         Player host = Player.createHost(sessionId, nickname);
         host.setColor(PlayerColor.RED);
+        int randomHp = RandomUtil.generateRandomHp(gameProperties.minInitialHp(), gameProperties.maxInitialHp());
 
-        Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host);
+        Room room = Room.create(roomId, roomCode, roomTitle, sessionId, host, randomHp);
 
         room.getCurrentPhaseData().put(sessionId, "HOST");
         roomRepository.saveRoom(room);
@@ -80,17 +85,31 @@ public class LobbyService {
 
         List<Room> waitingRooms = roomRepository.findAllWaitingRooms();
 
-        Optional<Room> bestRoom = waitingRooms.stream()
+        List<Room> availableRooms = waitingRooms.stream()
                 .filter(r -> r.getStatus() == RoomStatus.WAITING)
-                .filter(r -> r.getPlayers().size() < Room.MAX_PLAYER_COUNT).min((r1, r2) -> Integer.compare(r2.getPlayers().size(), r1.getPlayers().size()));
+                .filter(r -> r.getPlayers().size() < gameProperties.maxPlayerCount())
+                .toList();
 
-        if (bestRoom.isEmpty()) {
-            log.info("빠른 입장: 적절한 방 없음 -> 새 방 생성");
+        if (availableRooms.isEmpty()) {
             createRoom(sessionId);
             return;
         }
 
-        joinRoomInternal(sessionId, bestRoom.get().getRoomId());
+        Map<Integer, List<Room>> roomsByCount = availableRooms.stream()
+                .collect(Collectors.groupingBy(r -> r.getPlayers().size()));
+
+        for (int i = gameProperties.maxPlayerCount() - 1; i >= 0; i--) {
+            List<Room> candidates = roomsByCount.get(i);
+
+            if (candidates != null && !candidates.isEmpty()) {
+                Collections.shuffle(candidates);
+
+                joinRoomInternal(sessionId, candidates.getFirst().getRoomId());
+                return;
+            }
+        }
+
+        createRoom(sessionId);
     }
 
     public void getRoomList(String sessionId) {
@@ -102,7 +121,7 @@ public class LobbyService {
                         .roomId(r.getRoomId())
                         .roomTitle(r.getRoomTitle())
                         .currentCount(r.getPlayers().size())
-                        .maxCount(Room.MAX_PLAYER_COUNT)
+                        .maxCount(gameProperties.maxPlayerCount())
                         .isPlaying(false)
                         .build())
                 .collect(Collectors.toList());
@@ -112,13 +131,7 @@ public class LobbyService {
 
     private void joinRoomInternal(String sessionId, String roomId) {
 
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) {
-            responseSender.sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
-            return;
-        }
-
-        try {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
             if (roomOpt.isEmpty()) {
                 responseSender.sendError(sessionId, ErrorCode.ROOM_NOT_FOUND);
@@ -127,7 +140,7 @@ public class LobbyService {
             }
             Room room = roomOpt.get();
 
-            if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
+            if (room.getPlayers().size() >= gameProperties.maxPlayerCount()) {
                 responseSender.sendError(sessionId, ErrorCode.ROOM_FULL);
                 roomRepository.removeWaitingRoom(roomId);
                 return;
@@ -153,7 +166,7 @@ public class LobbyService {
             roomRepository.saveRoom(room);
             roomRepository.saveSessionRoomMapping(sessionId, roomId);
 
-            if (room.getPlayers().size() >= Room.MAX_PLAYER_COUNT) {
+            if (room.getPlayers().size() >= gameProperties.maxPlayerCount()) {
                 roomRepository.removeWaitingRoom(roomId);
             }
 
@@ -161,9 +174,10 @@ public class LobbyService {
             responseSender.broadcastLobbyUpdate(room);
 
             log.info("방 입장 완료: room={}, player={}", roomId, nickname);
+        });
 
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+        if (result.isLockFailed()) {
+            responseSender.sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
         }
     }
     
@@ -175,13 +189,7 @@ public class LobbyService {
             return;
         }
 
-        String lockToken = redisLockRepository.lock(roomId);
-        if (lockToken == null) {
-            responseSender.sendError(sessionId, ErrorCode.ROOM_LEAVE_FAILED);
-            return;
-        }
-
-        try {
+        LockResult<Void> result = lockFacade.execute(roomId, () -> {
             Optional<Room> roomOpt = roomRepository.findRoomById(roomId);
             if (roomOpt.isEmpty()) {
                 roomRepository.deleteSessionRoomMapping(sessionId);
@@ -222,10 +230,13 @@ public class LobbyService {
             roomRepository.saveRoom(room);
             responseSender.broadcastLobbyUpdate(room);
 
+            eventPublisher.publishEvent(new PlayerLeftEvent(roomId, sessionId));
             log.info("방 퇴장 처리 완료: session={}, room={}", sessionId, roomId);
 
-        } finally {
-            redisLockRepository.unlock(roomId, lockToken);
+        });
+
+        if (result.isLockFailed()) {
+            responseSender.sendError(sessionId, ErrorCode.ROOM_LEAVE_FAILED);
         }
     }
 }

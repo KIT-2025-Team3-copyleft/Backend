@@ -1,16 +1,15 @@
 package com.copyleft.GodsChoice.feature.game;
 
-import com.copyleft.GodsChoice.domain.Player;
+import com.copyleft.GodsChoice.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.GamePhase;
-import com.copyleft.GodsChoice.domain.type.RoomStatus;
-import com.copyleft.GodsChoice.infra.persistence.RedisLockRepository;
 import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
+import java.time.Instant;
 
 @Slf4j
 @Service
@@ -20,9 +19,9 @@ public class GamePlayService {
     private final RoomRepository roomRepository;
     private final GameRoomLockFacade lockFacade;
     private final GameResponseSender gameResponseSender;
-
     private final GameJudgeService gameJudgeService;
-
+    private final TaskScheduler taskScheduler;
+    private final GameProperties gameProperties;
 
     public void selectCard(String sessionId, String cardContent) {
         String roomId = roomRepository.getRoomIdBySessionId(sessionId);
@@ -37,7 +36,10 @@ public class GamePlayService {
 
             if (room.isAllPlayersSelectedCard()) {
                 gameResponseSender.broadcastAllCardsSelected(room);
-                gameJudgeService.judgeRound(roomId);
+                taskScheduler.schedule(
+                        () -> gameJudgeService.judgeRound(roomId),
+                        Instant.now().plusSeconds(gameProperties.judgeDelay())
+                );
             }
         });
     }

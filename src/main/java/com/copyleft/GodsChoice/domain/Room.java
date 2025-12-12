@@ -27,8 +27,6 @@ public class Room {
     private String roomCode;      // 유저 공유용 코드
     private String hostSessionId; // 방장의 sessionId
 
-    public static final int MAX_PLAYER_COUNT = 4;
-
     @Builder.Default
     private List<Player> players = new ArrayList<>();
 
@@ -66,7 +64,7 @@ public class Room {
         }
     }
 
-    public static Room create(String roomId, String roomCode, String roomTitle, String hostSessionId, Player hostPlayer) {
+    public static Room create(String roomId, String roomCode, String roomTitle, String hostSessionId, Player hostPlayer, int initialHp) {
 
         Room room = Room.builder()
                 .roomId(roomId)
@@ -74,7 +72,7 @@ public class Room {
                 .roomTitle(roomTitle)
                 .hostSessionId(hostSessionId)
                 .status(RoomStatus.WAITING)
-                .currentHp(1000)
+                .currentHp(initialHp)
                 .currentRound(1)
                 .votingDisabled(false)
                 .createdAt(System.currentTimeMillis())
@@ -93,7 +91,7 @@ public class Room {
             p.setHost(false);
         }
 
-        Player newHost = this.players.get(0);
+        Player newHost = this.players.getFirst();
         newHost.setHost(true);
 
         this.hostSessionId = newHost.getSessionId();
@@ -115,9 +113,9 @@ public class Room {
         return this.currentPhaseData.size();
     }
 
-    public void resetForNewGame() {
+    public void resetForNewGame(int newHp) {
         this.status = RoomStatus.WAITING;
-        this.currentHp = 1000;
+        this.currentHp = newHp;
         this.currentRound = 1;
         this.currentPhase = null;
         this.godPersonality = null;
