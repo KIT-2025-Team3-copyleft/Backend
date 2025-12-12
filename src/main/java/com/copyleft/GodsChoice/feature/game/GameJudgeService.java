@@ -55,6 +55,10 @@ public class GameJudgeService {
     private void checkPhaseFinishCondition(Room room) {
         if (room.getStatus() != RoomStatus.PLAYING) return;
 
+        if (room.getPlayers().isEmpty()) {
+            return;
+        }
+
         GamePhase phase = room.getCurrentPhase();
         if (phase == null) return;
 
