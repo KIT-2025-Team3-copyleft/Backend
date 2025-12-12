@@ -18,7 +18,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -81,17 +83,31 @@ public class LobbyService {
 
         List<Room> waitingRooms = roomRepository.findAllWaitingRooms();
 
-        Optional<Room> bestRoom = waitingRooms.stream()
+        List<Room> availableRooms = waitingRooms.stream()
                 .filter(r -> r.getStatus() == RoomStatus.WAITING)
-                .filter(r -> r.getPlayers().size() < Room.MAX_PLAYER_COUNT).min((r1, r2) -> Integer.compare(r2.getPlayers().size(), r1.getPlayers().size()));
+                .filter(r -> r.getPlayers().size() < Room.MAX_PLAYER_COUNT)
+                .toList();
 
-        if (bestRoom.isEmpty()) {
-            log.info("빠른 입장: 적절한 방 없음 -> 새 방 생성");
+        if (availableRooms.isEmpty()) {
             createRoom(sessionId);
             return;
         }
 
-        joinRoomInternal(sessionId, bestRoom.get().getRoomId());
+        Map<Integer, List<Room>> roomsByCount = availableRooms.stream()
+                .collect(Collectors.groupingBy(r -> r.getPlayers().size()));
+
+        for (int i = Room.MAX_PLAYER_COUNT - 1; i >= 0; i--) {
+            List<Room> candidates = roomsByCount.get(i);
+
+            if (candidates != null && !candidates.isEmpty()) {
+                Collections.shuffle(candidates);
+
+                joinRoomInternal(sessionId, candidates.get(0).getRoomId());
+                return;
+            }
+        }
+
+        createRoom(sessionId);
     }
 
     public void getRoomList(String sessionId) {
