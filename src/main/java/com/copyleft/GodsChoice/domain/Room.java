@@ -40,6 +40,9 @@ public class Room {
     private Oracle oracle;         // 이번 라운드 신탁
 
     @Builder.Default
+    private Set<Oracle> usedOracles = new HashSet<>();
+
+    @Builder.Default
     private boolean votingDisabled = false; // 배신자 색출 후 투표 잠금 여부
 
     private RoomStatus status;        // "WAITING", "STARTING", "PLAYING"
@@ -121,6 +124,7 @@ public class Room {
         this.godPersonality = null;
         this.oracle = null;
         this.votingDisabled = false;
+        this.usedOracles.clear();
 
         if (this.players != null) {
             for (Player p : this.players) {

@@ -3,6 +3,7 @@ package com.copyleft.GodsChoice.infra.external;
 import com.copyleft.GodsChoice.domain.type.GodPersonality;
 import com.copyleft.GodsChoice.domain.type.Oracle;
 import com.copyleft.GodsChoice.domain.vo.AiJudgment;
+import com.copyleft.GodsChoice.game.infra.GroqApiClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

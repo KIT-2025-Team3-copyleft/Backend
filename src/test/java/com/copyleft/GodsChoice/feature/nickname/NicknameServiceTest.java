@@ -1,8 +1,9 @@
 package com.copyleft.GodsChoice.feature.nickname;
 
-import com.copyleft.GodsChoice.feature.nickname.dto.NicknameResponse;
-import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
-import com.copyleft.GodsChoice.infra.websocket.WebSocketSender;
+import com.copyleft.GodsChoice.user.service.NicknameService;
+import com.copyleft.GodsChoice.user.dto.NicknameResponse;
+import com.copyleft.GodsChoice.user.repository.NicknameRepository;
+import com.copyleft.GodsChoice.global.websocket.WebSocketSender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
