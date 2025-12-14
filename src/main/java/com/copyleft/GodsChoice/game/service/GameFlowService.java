@@ -178,12 +178,18 @@ public class GameFlowService {
     }
 
     private Oracle pickNewUniqueOracle(Room room) {
+        if (room.getUsedOracles() == null) {
+            room.setUsedOracles(new HashSet<>());
+        }
+
         List<Oracle> allOracles = new ArrayList<>(List.of(Oracle.values()));
         allOracles.removeAll(room.getUsedOracles());
+
         if (allOracles.isEmpty()) {
             room.getUsedOracles().clear();
             allOracles.addAll(List.of(Oracle.values()));
         }
+
         Oracle selected = allOracles.get(new Random().nextInt(allOracles.size()));
         room.getUsedOracles().add(selected);
         return selected;
