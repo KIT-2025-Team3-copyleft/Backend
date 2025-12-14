@@ -16,7 +16,7 @@ game:
     judge-delay: 5
     vote-proposal-time: 60 #VOTE_PROPOSAL_SECONDS
     trial-time: 120 #TRIAL_DURATION_SECONDS
-    round-result-duration: 60 #ROUND_RESULT_DURATION_SECONDS
+    round-result-duration: 40 #ROUND_RESULT_DURATION_SECONDS
     next-round-delay: 3
     vote-fail-delay: 1
     game-over-cleanup-time: 30

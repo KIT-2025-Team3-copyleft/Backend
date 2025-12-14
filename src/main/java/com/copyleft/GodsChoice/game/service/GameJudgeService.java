@@ -148,7 +148,7 @@ public class GameJudgeService {
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
 
-            if (room == null || room.getCurrentPhase() != GamePhase.CARD_SELECT || room.getCurrentRound() != targetRound) return;
+            if (room == null || room.getStatus() != RoomStatus.PLAYING || room.getCurrentPhase() != GamePhase.CARD_SELECT || room.getCurrentRound() != targetRound) return;
 
             boolean changed = false;
             for (Player p : room.getPlayers()) {
@@ -179,7 +179,7 @@ public class GameJudgeService {
     public void processVoteProposalEnd(String roomId, int targetRound) {
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL || room.getCurrentRound() != targetRound) return;
+            if (room == null || room.getStatus() != RoomStatus.PLAYING || room.getCurrentPhase() != GamePhase.VOTE_PROPOSAL || room.getCurrentRound() != targetRound) return;
 
             boolean isPassed = room.isVotePassed();
             log.info("찬반 투표 결과: room={}, passed={}", roomId, isPassed);
@@ -208,7 +208,7 @@ public class GameJudgeService {
     public void processTrialEnd(String roomId, int targetRound) {
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() != GamePhase.TRIAL_VOTE || room.getCurrentRound() != targetRound) return;
+            if (room == null || room.getStatus() != RoomStatus.PLAYING || room.getCurrentPhase() != GamePhase.TRIAL_VOTE || room.getCurrentRound() != targetRound) return;
 
             String targetId = room.getMostVotedTargetSessionId();
             boolean success = false;

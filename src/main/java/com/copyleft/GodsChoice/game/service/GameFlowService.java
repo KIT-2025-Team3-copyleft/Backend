@@ -160,7 +160,7 @@ public class GameFlowService {
     public void startOraclePhase(String roomId) {
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null || room.getCurrentPhase() == GamePhase.ORACLE) return;
+            if (room == null || room.getStatus() != RoomStatus.PLAYING || room.getCurrentPhase() == GamePhase.ORACLE) return;
 
             room.changePhase(GamePhase.ORACLE);
             roomRepository.saveRoom(room);
@@ -180,7 +180,7 @@ public class GameFlowService {
     public void startRound(String roomId) {
         lockFacade.execute(roomId, () -> {
             Room room = roomRepository.findRoomById(roomId).orElse(null);
-            if (room == null) return;
+            if (room == null || room.getStatus() != RoomStatus.PLAYING) return;
 
             List<SlotType> slots = new ArrayList<>(List.of(SlotType.SUBJECT, SlotType.TARGET, SlotType.HOW, SlotType.ACTION));
             Collections.shuffle(slots);
