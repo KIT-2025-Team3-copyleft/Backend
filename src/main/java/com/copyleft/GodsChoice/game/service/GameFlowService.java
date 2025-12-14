@@ -151,7 +151,7 @@ public class GameFlowService {
         }
 
         Random random = new Random();
-        room.setOracle(Oracle.values()[random.nextInt(Oracle.values().length)]);
+        room.setOracle(pickNewUniqueOracle(room));
         room.setGodPersonality(GodPersonality.values()[random.nextInt(GodPersonality.values().length)]);
     }
 
@@ -175,6 +175,18 @@ public class GameFlowService {
 
             taskScheduler.schedule(() -> startRound(roomId), Instant.now().plusSeconds(gameProperties.oraclePhase()));
         });
+    }
+
+    private Oracle pickNewUniqueOracle(Room room) {
+        List<Oracle> allOracles = new ArrayList<>(List.of(Oracle.values()));
+        allOracles.removeAll(room.getUsedOracles());
+        if (allOracles.isEmpty()) {
+            room.getUsedOracles().clear();
+            allOracles.addAll(List.of(Oracle.values()));
+        }
+        Oracle selected = allOracles.get(new Random().nextInt(allOracles.size()));
+        room.getUsedOracles().add(selected);
+        return selected;
     }
 
     public void startRound(String roomId) {
@@ -278,7 +290,7 @@ public class GameFlowService {
             } else {
                 room.changePhase(null);
                 room.setCurrentRound(room.getCurrentRound() + 1);
-                room.setOracle(Oracle.values()[new Random().nextInt(Oracle.values().length)]);
+                room.setOracle(pickNewUniqueOracle(room));
 
                 roomRepository.saveRoom(room);
                 gameResponseSender.broadcastNextRound(room);
