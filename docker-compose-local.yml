@@ -1,9 +1,22 @@
 version: '3.8'
 
 services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - spring-boot-1
+      - spring-boot-2
+    networks:
+      - app-network
+
   spring-boot-1:
     build: .
-    container_name: godschoice-backend-1
+    container_name: spring-boot-1
     environment:
       - SPRING_PROFILES_ACTIVE=dev
       - REDIS_HOST=redis
@@ -18,18 +31,14 @@ services:
         condition: service_started
       mysql:
         condition: service_healthy
+    ports:
+      - "8080:8080"
     networks:
-      - proxy-network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - app-network
 
   spring-boot-2:
     build: .
-    container_name: godschoice-backend-2
+    container_name: spring-boot-2
     environment:
       - SPRING_PROFILES_ACTIVE=dev
       - REDIS_HOST=redis
@@ -45,36 +54,23 @@ services:
       mysql:
         condition: service_healthy
     networks:
-      - proxy-network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  frontend:
-    image: nginx:alpine
-    container_name: godschoice-frontend
-    volumes:
-      - ./frontend:/usr/share/nginx/html
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf
-    networks:
-      - proxy-network
-    restart: unless-stopped
+      - app-network
 
   redis:
-    image: redis:7.2
-    container_name: godschoice-redis
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
-      - proxy-network
-    restart: unless-stopped
+      - app-network
 
   mysql:
     image: mysql:8.0
-    container_name: godschoice-mysql
+    container_name: mysql
+    ports:
+      - "3306:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=${MYSQL_DATABASE}
@@ -84,17 +80,16 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
-      - proxy-network
+      - app-network
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}" ]
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p$MYSQL_ROOT_PASSWORD || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
 networks:
-  proxy-network:
-    external: true
+  app-network:
+    driver: bridge
 
 volumes:
   redis-data:

@@ -1,0 +1,43 @@
+name: Deploy to Mini PC (Direct Build)
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy-direct:
+    runs-on: self-hosted
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: JDK 21 설정
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: 소스코드 동기화
+        run: |
+          # --exclude: 이 폴더/파일은 지우지도 말고 덮어쓰지도 마라
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='frontend' \
+            --exclude='uploads' \
+            --exclude='.env' \
+            ./ /home/woni/server/OSP_GodsChoice/
+
+      - name: 컨테이너 빌드 및 재실행
+        run: |
+          cd ~/server/OSP_GodsChoice
+          
+          echo "🏗️ 로컬 빌드 시작..."
+          chmod +x ./gradlew
+          ./gradlew clean bootJar -x test
+          
+          # prod 파일이 아니라 기본 파일 사용
+          docker compose up -d --build
+          
+          docker image prune -f
+          echo "✅ 배포 완료!"
