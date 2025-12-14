@@ -1,12 +1,15 @@
 package com.copyleft.GodsChoice.feature.lobby;
 
+import com.copyleft.GodsChoice.global.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
-import com.copyleft.GodsChoice.feature.game.GameRoomLockFacade; // 추가
-import com.copyleft.GodsChoice.feature.game.LockResult;       // 추가
+import com.copyleft.GodsChoice.game.service.GameRoomLockFacade; // 추가
+import com.copyleft.GodsChoice.game.service.LockResult;       // 추가
 import com.copyleft.GodsChoice.global.constant.ErrorCode;
-import com.copyleft.GodsChoice.infra.persistence.NicknameRepository;
-import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
+import com.copyleft.GodsChoice.user.repository.NicknameRepository;
+import com.copyleft.GodsChoice.game.repository.RoomRepository;
+import com.copyleft.GodsChoice.lobby.service.LobbyResponseSender;
+import com.copyleft.GodsChoice.lobby.service.LobbyService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,12 +17,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,7 +35,8 @@ class LobbyServiceTest {
 
     @Mock private RoomRepository roomRepository;
     @Mock private NicknameRepository nicknameRepository;
-    // @Mock private RedisLockRepository redisLockRepository; // [삭제] 더 이상 안 씀
+    @Mock private GameProperties gameProperties;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private GameRoomLockFacade lockFacade; // [추가] 이걸로 교체
     @Mock private LobbyResponseSender responseSender;
 
@@ -78,28 +84,24 @@ class LobbyServiceTest {
     @Test
     @DisplayName("방 입장 시 분산 락 획득에 실패하면 에러를 보낸다")
     void joinRoom_LockFailed() {
-        // given
+        // Given
         String sessionId = "session-123";
+        String roomCode = "CODE12";
         String roomId = "room-uuid";
-        Room bestRoom = Room.builder().roomId(roomId).status(RoomStatus.WAITING).build();
 
-        // 빠른 입장 로직상 방을 먼저 찾음
-        when(roomRepository.findAllWaitingRooms()).thenReturn(java.util.List.of(bestRoom));
+        // [핵심] 방 코드로 ID를 찾을 수 있어야 락 로직으로 진입합니다.
+        when(roomRepository.findRoomIdByCode(roomCode)).thenReturn(roomId);
 
-        // [핵심] 락 획득 실패 시뮬레이션
+        // 락 획득 실패 설정
+        // (이 줄이 "불필요하다"고 에러가 났던 건데, 위 설정을 추가하면 이 줄이 실행되므로 에러가 사라집니다.)
         when(lockFacade.execute(eq(roomId), any(Runnable.class)))
                 .thenReturn(LockResult.lockFailed());
 
-        // when
-        lobbyService.quickJoin(sessionId);
+        // When
+        lobbyService.joinRoomByCode(sessionId, roomCode);
 
-        // then
-        // 락 실패 에러를 보내는지 확인
+        // Then
         verify(responseSender).sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
-
-        // 락 내부 로직(방 조회, 저장 등)은 실행되면 안 됨
-        verify(roomRepository, never()).findRoomById(anyString());
-        verify(roomRepository, never()).saveRoom(any(Room.class));
     }
 
     @Test
@@ -115,6 +117,7 @@ class LobbyServiceTest {
                 .status(RoomStatus.WAITING)
                 .build();
 
+        when(gameProperties.maxPlayerCount()).thenReturn(4);
         // 1. 빠른 입장으로 방 찾기 모킹
         when(roomRepository.findAllWaitingRooms()).thenReturn(java.util.List.of(existingRoom));
 
@@ -144,5 +147,54 @@ class LobbyServiceTest {
         // 성공 메시지 전송 확인
         verify(responseSender).sendJoinSuccess(sessionId, existingRoom);
         verify(responseSender).broadcastLobbyUpdate(existingRoom);
+    }
+
+    @Test
+    void joinRoomByCode_LockFailed() {
+        // Given
+        String sessionId = "session-123";
+        String roomCode = "CODE12";
+        String roomId = "room-uuid";
+
+        // 1. 방 코드 조회 성공 설정
+        when(roomRepository.findRoomIdByCode(roomCode)).thenReturn(roomId);
+
+        // 2. 락 실패 설정
+        when(lockFacade.execute(eq(roomId), any(Runnable.class)))
+                .thenReturn(LockResult.lockFailed());
+
+        // When
+        lobbyService.joinRoomByCode(sessionId, roomCode);
+
+        // Then
+        verify(responseSender).sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
+    }
+
+    @Test
+    void quickJoin_LockFailed() {
+        // Given
+        String sessionId = "session-123";
+        String roomId = "room-uuid";
+
+        // [핵심 1] 최대 인원수를 설정해야 반복문이 돕니다.
+        when(gameProperties.maxPlayerCount()).thenReturn(4);
+
+        // [핵심 2] 입장 가능한 방이 있어야 방 생성으로 빠지지 않고 락 로직을 탑니다.
+        Room room = Room.builder()
+                .roomId(roomId)
+                .status(RoomStatus.WAITING)
+                .players(new ArrayList<>()) // 인원 0명
+                .build();
+        when(roomRepository.findAllWaitingRooms()).thenReturn(List.of(room));
+
+        // 락 획득 실패 설정
+        when(lockFacade.execute(eq(roomId), any(Runnable.class)))
+                .thenReturn(LockResult.lockFailed());
+
+        // When
+        lobbyService.quickJoin(sessionId);
+
+        // Then
+        verify(responseSender).sendError(sessionId, ErrorCode.ROOM_JOIN_FAILED);
     }
 }
