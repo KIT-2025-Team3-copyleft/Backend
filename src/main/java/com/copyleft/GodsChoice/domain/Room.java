@@ -1,0 +1,207 @@
+package com.copyleft.GodsChoice.domain;
+
+import com.copyleft.GodsChoice.domain.type.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
+import lombok.extern.jackson.Jacksonized;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Getter
+@Setter
+@Builder
+@Jacksonized
+@NoArgsConstructor
+@AllArgsConstructor
+@ToString
+public class Room {
+
+    private String roomTitle;     // 방 제목
+    private String roomId;        // 내부 관리용 UUID
+    private String roomCode;      // 유저 공유용 코드
+    private String hostSessionId; // 방장의 sessionId
+
+    @Builder.Default
+    private List<Player> players = new ArrayList<>();
+
+    @Builder.Default
+    private int currentHp = 500;
+
+    @Builder.Default
+    private int currentRound = 1;
+
+    private GodPersonality godPersonality; // 이번 판의 신 성향
+    private Oracle oracle;         // 이번 라운드 신탁
+
+    @Builder.Default
+    private Set<Oracle> usedOracles = new HashSet<>();
+
+    @Builder.Default
+    private boolean votingDisabled = false; // 배신자 색출 후 투표 잠금 여부
+
+    private RoomStatus status;        // "WAITING", "STARTING", "PLAYING"
+    private GamePhase currentPhase;  // "CARD_SELECT", "JUDGING", "VOTE_PROPOSAL" 등
+
+    @Builder.Default
+    private long createdAt = System.currentTimeMillis(); // 생성 시각 (Timestamp)
+
+    @Builder.Default
+    private Map<String, String> currentPhaseData = new ConcurrentHashMap<>();
+
+    public void addPlayer(Player player) {
+        if (this.players == null) {
+            this.players = new ArrayList<>();
+        }
+        this.players.add(player);
+    }
+
+    public void removePlayer(String sessionId) {
+        if (this.players != null) {
+            this.players.removeIf(p -> Objects.equals(p.getSessionId(), sessionId));
+        }
+    }
+
+    public static Room create(String roomId, String roomCode, String roomTitle, String hostSessionId, Player hostPlayer, int initialHp) {
+
+        Room room = Room.builder()
+                .roomId(roomId)
+                .roomCode(roomCode)
+                .roomTitle(roomTitle)
+                .hostSessionId(hostSessionId)
+                .status(RoomStatus.WAITING)
+                .currentHp(initialHp)
+                .currentRound(1)
+                .votingDisabled(false)
+                .createdAt(System.currentTimeMillis())
+                .build();
+
+        room.addPlayer(hostPlayer);
+        return room;
+    }
+
+    public String delegateHost() {
+        if (this.players == null || this.players.isEmpty()) {
+            return null;
+        }
+
+        for (Player p : this.players) {
+            p.setHost(false);
+        }
+
+        Player newHost = this.players.getFirst();
+        newHost.setHost(true);
+
+        this.hostSessionId = newHost.getSessionId();
+        this.roomTitle = newHost.getNickname() + "님의 방";
+
+        return newHost.getSessionId();
+    }
+
+    public boolean isEmpty() {
+        return this.players == null || this.players.isEmpty();
+    }
+
+
+    public void clearPhaseData() {
+        this.currentPhaseData.clear();
+    }
+
+    public int getActionCount() {
+        return this.currentPhaseData.size();
+    }
+
+    public void resetForNewGame(int newHp) {
+        this.status = RoomStatus.WAITING;
+        this.currentHp = newHp;
+        this.currentRound = 1;
+        this.currentPhase = null;
+        this.godPersonality = null;
+        this.oracle = null;
+        this.votingDisabled = false;
+        this.usedOracles.clear();
+
+        if (this.players != null) {
+            for (Player p : this.players) {
+                p.setRole(null);
+                p.setSlot(null);
+                p.setSelectedCard(null);
+                p.setVoteTarget(null);
+            }
+        }
+    }
+
+    @JsonIgnore
+    public PlayerColor getNextAvailableColor() {
+        if (this.players == null) return PlayerColor.RED;
+
+        List<PlayerColor> usedColors = this.players.stream()
+                .map(Player::getColor)
+                .toList();
+
+        for (PlayerColor color : PlayerColor.values()) {
+            if (!usedColors.contains(color)) {
+                return color;
+            }
+        }
+        throw new IllegalStateException("All colors are already assigned");
+    }
+
+    public Optional<Player> findPlayer(String sessionId) {
+        return this.players.stream()
+                .filter(p -> p.getSessionId().equals(sessionId))
+                .findFirst();
+    }
+
+    public boolean isAllPlayersSelectedCard() {
+        if (players == null || players.isEmpty()) return false;
+        return players.stream().allMatch(p -> p.getSelectedCard() != null);
+    }
+
+    public boolean isVotePassed() {
+        long agreeCount = this.currentPhaseData.values().stream()
+                .filter("true"::equalsIgnoreCase)
+                .count();
+        return agreeCount >= 2;
+    }
+
+    public String getMostVotedTargetSessionId() {
+        if (this.currentPhaseData.isEmpty()) return null;
+
+        Map<String, Integer> voteCounts = new java.util.HashMap<>();
+        for (String target : this.currentPhaseData.values()) {
+            if (target != null && !target.isBlank()) {
+                voteCounts.put(target, voteCounts.getOrDefault(target, 0) + 1);
+            }
+        }
+
+        if (voteCounts.isEmpty()) return null;
+        int maxVotes = Collections.max(voteCounts.values());
+        List<String> maxVoters = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : voteCounts.entrySet()) {
+            if (entry.getValue() == maxVotes) {
+                maxVoters.add(entry.getKey());
+            }
+        }
+
+        if (maxVoters.size() > 1) {
+            return null;
+        }
+
+        return maxVoters.getFirst();
+    }
+
+    public void changePhase(GamePhase nextPhase) {
+        this.currentPhase = nextPhase;
+        this.currentPhaseData.clear();
+    }
+
+    public void adjustHp(int amount) {
+        this.currentHp += amount;
+    }
+}

@@ -1,0 +1,91 @@
+package com.copyleft.GodsChoice.feature.nickname;
+
+import com.copyleft.GodsChoice.user.service.NicknameService;
+import com.copyleft.GodsChoice.user.dto.NicknameResponse;
+import com.copyleft.GodsChoice.user.repository.NicknameRepository;
+import com.copyleft.GodsChoice.global.websocket.WebSocketSender;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class) // Mockito 확장 기능 사용
+class NicknameServiceTest {
+
+    @InjectMocks
+    private NicknameService nicknameService; // 테스트 대상
+
+    @Mock
+    private NicknameRepository nicknameRepository; // 가짜 Repository
+
+    @Mock
+    private WebSocketSender webSocketSender; // 가짜 Sender
+
+    @Test
+    void setNickname_Success() {
+        // given
+        String sessionId = "session123";
+        String nickname = "테스트닉";
+
+        when(nicknameRepository.reserveNickname(nickname)).thenReturn(true);
+
+        // when
+        nicknameService.setNickname(sessionId, nickname);
+
+        // then
+        verify(nicknameRepository).reserveNickname(nickname);
+        verify(nicknameRepository).saveSessionNicknameMapping(sessionId, nickname);
+        ArgumentCaptor<NicknameResponse> captor = ArgumentCaptor.forClass(NicknameResponse.class);
+        verify(webSocketSender).sendEventToSession(eq(sessionId), captor.capture());
+
+        NicknameResponse response = captor.getValue();
+        assertEquals("NICKNAME_SUCCESS", response.getEvent());
+        assertEquals(nickname, response.getPlayer().getNickname());
+    }
+
+    @Test
+    void setNickname_Duplicate() {
+        // given
+        String sessionId = "session123";
+        String nickname = "중복닉";
+
+        when(nicknameRepository.reserveNickname(nickname)).thenReturn(false);
+
+        // when
+        nicknameService.setNickname(sessionId, nickname);
+
+        // then
+        verify(nicknameRepository).reserveNickname(nickname);
+        // 중복이면 저장은 호출되면 안 됨
+        verify(nicknameRepository, never()).saveSessionNicknameMapping(anyString(), anyString());
+
+        ArgumentCaptor<NicknameResponse> captor = ArgumentCaptor.forClass(NicknameResponse.class);
+        verify(webSocketSender).sendEventToSession(eq(sessionId), captor.capture());
+        assertEquals("NICKNAME_DUPLICATE", captor.getValue().getEvent());
+    }
+
+    @Test
+    @DisplayName("닉네임 길이가 유효하지 않으면 에러를 보낸다")
+    void setNickname_InvalidLength() {
+        // given
+        String sessionId = "abc-123";
+        String shortName = "김"; // 2자 미만
+
+        // when
+        nicknameService.setNickname(sessionId, shortName);
+
+        // then
+        verify(nicknameRepository, never()).reserveNickname(anyString()); // 중복 검사도 안 해야 함
+        ArgumentCaptor<NicknameResponse> captor = ArgumentCaptor.forClass(NicknameResponse.class);
+        verify(webSocketSender).sendEventToSession(eq(sessionId), captor.capture());
+        assertEquals("ERROR_MESSAGE", captor.getValue().getEvent());
+    }
+}
