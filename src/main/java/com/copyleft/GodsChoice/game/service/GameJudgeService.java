@@ -219,7 +219,7 @@ public class GameJudgeService {
                 log.info("투표 무효 (동점 또는 득표 없음): room={}", roomId);
                 room.changePhase(GamePhase.TRIAL_RESULT);
                 roomRepository.saveRoom(room);
-                gameResponseSender.broadcastTrialResult(room, false, "무효(동점)", PlayerRole.CITIZEN);
+                gameResponseSender.broadcastTrialResult(room, false, null, null);
 
                 taskScheduler.schedule(
                         () -> eventPublisher.publishEvent(new GameDecisionEvent(roomId, GameDecisionEvent.Type.TRIAL_FINISHED)),
