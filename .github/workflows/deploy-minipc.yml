@@ -30,6 +30,7 @@ jobs:
 
       - name: 컨테이너 빌드 및 재실행
         run: |
+          docker network create proxy-network || true
           cd ~/server/OSP_GodsChoice
           
           echo "🏗️ 로컬 빌드 시작..."
