@@ -49,7 +49,14 @@ public class LobbyService {
         }
 
         String roomId = RandomUtil.generateRoomId();
-        String roomCode = RandomUtil.generateRoomCode();
+        String roomCode;
+        try {
+            roomCode = generateUniqueRoomCode(roomId);
+        } catch (RuntimeException e) {
+            log.error("방 생성 실패 (코드 중복): {}", e.getMessage());
+            responseSender.sendError(sessionId, ErrorCode.UNKNOWN_ERROR);
+            return;
+        }
         String roomTitle = nickname + "님의 방";
 
         Player host = Player.createHost(sessionId, nickname);
@@ -61,13 +68,24 @@ public class LobbyService {
         room.getCurrentPhaseData().put(sessionId, "HOST");
         roomRepository.saveRoom(room);
         roomRepository.saveSessionRoomMapping(sessionId, roomId);
-        roomRepository.saveRoomCodeMapping(roomCode, roomId);
         roomRepository.addWaitingRoom(roomId);
 
         responseSender.sendCreateSuccess(sessionId, room);
         responseSender.broadcastLobbyUpdate(room);
 
         log.info("방 생성 완료: id={}, code={}", roomId, roomCode);
+    }
+
+    private String generateUniqueRoomCode(String roomId) {
+        int maxRetries = 5;
+        for (int i = 0; i < maxRetries; i++) {
+            String code = RandomUtil.generateRoomCode();
+            if (roomRepository.saveRoomCodeMappingIfAbsent(code, roomId)) {
+                return code;
+            }
+            log.warn("방 코드 충돌 발생, 재생성 시도 ({}/{}): {}", i + 1, maxRetries, code);
+        }
+        throw new RuntimeException("방 코드 생성 실패: 최대 재시도 횟수 초과");
     }
 
     public void joinRoomByCode(String sessionId, String roomCode) {
