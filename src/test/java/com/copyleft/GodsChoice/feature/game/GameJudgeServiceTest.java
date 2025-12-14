@@ -1,6 +1,6 @@
 package com.copyleft.GodsChoice.feature.game;
 
-import com.copyleft.GodsChoice.config.GameProperties;
+import com.copyleft.GodsChoice.global.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.GamePhase;
@@ -8,9 +8,13 @@ import com.copyleft.GodsChoice.domain.type.GodPersonality;
 import com.copyleft.GodsChoice.domain.type.Oracle;
 import com.copyleft.GodsChoice.domain.type.SlotType;
 import com.copyleft.GodsChoice.domain.vo.AiJudgment;
-import com.copyleft.GodsChoice.feature.game.event.GameDecisionEvent; // 이벤트 클래스 import
-import com.copyleft.GodsChoice.infra.external.GroqApiClient;
-import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
+import com.copyleft.GodsChoice.game.event.GameDecisionEvent; // 이벤트 클래스 import
+import com.copyleft.GodsChoice.game.service.GameJudgeService;
+import com.copyleft.GodsChoice.game.service.GameResponseSender;
+import com.copyleft.GodsChoice.game.service.GameRoomLockFacade;
+import com.copyleft.GodsChoice.game.service.LockResult;
+import com.copyleft.GodsChoice.game.infra.GroqApiClient;
+import com.copyleft.GodsChoice.game.repository.RoomRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

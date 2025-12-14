@@ -1,13 +1,13 @@
 package com.copyleft.GodsChoice.feature.game;
 
-import com.copyleft.GodsChoice.config.GameProperties;
+import com.copyleft.GodsChoice.global.config.GameProperties;
 import com.copyleft.GodsChoice.domain.Player;
 import com.copyleft.GodsChoice.domain.Room;
 import com.copyleft.GodsChoice.domain.type.GamePhase;
 import com.copyleft.GodsChoice.domain.type.RoomStatus;
-import com.copyleft.GodsChoice.feature.lobby.LobbyResponseSender;
-import com.copyleft.GodsChoice.global.constant.ErrorCode;
-import com.copyleft.GodsChoice.infra.persistence.RoomRepository;
+import com.copyleft.GodsChoice.game.service.*;
+import com.copyleft.GodsChoice.lobby.service.LobbyResponseSender;
+import com.copyleft.GodsChoice.game.repository.RoomRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -1,0 +1,100 @@
+package com.copyleft.GodsChoice.game.dto;
+
+import com.copyleft.GodsChoice.domain.Room;
+import com.copyleft.GodsChoice.domain.type.*;
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.List;
+
+public class GamePayloads {
+
+    // 신탁 공개용 데이터
+    @Getter
+    @Builder
+    public static class OracleInfo {
+        private Room room;
+        private String oracle;
+    }
+
+    // 역할 공개용 데이터 (개인)
+    @Getter
+    @Builder
+    public static class RoleInfo {
+        private PlayerRole role;
+        private String godPersonality; // 배신자용
+    }
+
+    // 카드 수신용 데이터
+    @Getter
+    @Builder
+    public static class CardInfo {
+        private SlotType slotType;
+        private List<String> cards;
+        private List<SlotOwnerEntry> slotOwners;
+    }
+
+    @Getter
+    @Builder
+    public static class SlotOwnerEntry {
+        private SlotType slotType;
+        private PlayerColor playerColor;
+    }
+
+    // 라운드 결과 데이터
+    @Getter
+    @Builder
+    public static class RoundResult {
+        private Room room;
+        private int score;
+        private String reason;
+        private List<SentencePart> sentenceParts;
+        private String fullSentence;
+    }
+
+    @Getter
+    @Builder
+    public static class SentencePart {
+        private PlayerColor playerColor;
+        private String word;
+        private SlotType slotType;
+    }
+
+    @Getter
+    @Builder
+    public static class VoteUpdate {
+        private int count;       // 현재 투표한 인원 수
+        private int totalPlayers;// 전체 인원 수
+    }
+
+    @Getter
+    @Builder
+    public static class TrialVoteUpdate {
+        private List<TargetVoteCount> voteStatus;
+    }
+
+    @Getter
+    @Builder
+    public static class TargetVoteCount {
+        private String targetId; // 투표 받은 사람의 SessionId
+        private int count;       // 득표 수
+    }
+
+    // 심판 결과 데이터
+    @Getter
+    @Builder
+    public static class TrialResult {
+        private Room room;
+        private boolean success;
+        private String targetNickname;
+        private PlayerRole targetRole;
+    }
+
+    // 게임 오버 데이터
+    @Getter
+    @Builder
+    public static class GameOverInfo {
+        private Room room;
+        private PlayerRole winnerRole;
+    }
+}
