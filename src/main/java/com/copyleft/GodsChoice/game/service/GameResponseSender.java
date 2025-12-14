@@ -160,7 +160,13 @@ public class GameResponseSender {
     }
 
     public void broadcastTrialResult(Room room, boolean success, String targetNickname, PlayerRole targetRole) {
-        String msg = String.format("심판 결과: %s님은 %s였습니다!", targetNickname, targetRole);
+        String msg;
+        if (targetNickname == null) {
+            msg = "투표가 동점이 되어 아무도 심판받지 않았습니다.";
+        } else {
+            String roleText = (targetRole == PlayerRole.TRAITOR) ? "이단자" : "시민이";
+            msg = String.format("심판 결과: %s님은 %s였습니다!", targetNickname, roleText);
+        }
 
         GamePayloads.TrialResult data = GamePayloads.TrialResult.builder()
                 .room(room)

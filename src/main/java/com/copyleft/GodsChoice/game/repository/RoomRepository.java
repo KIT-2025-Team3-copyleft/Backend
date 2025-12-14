@@ -56,16 +56,18 @@ public class RoomRepository {
         redisTemplate.opsForValue().set(key, roomId, 1, TimeUnit.HOURS);
     }
 
+    public boolean saveRoomCodeMappingIfAbsent(String roomCode, String roomId) {
+        String key = RedisKey.ROOM_CODE.makeKey(roomCode);
+        Boolean result = redisTemplate.opsForValue().setIfAbsent(key, roomId, ROOM_TTL_HOURS, TimeUnit.HOURS);
+        return Boolean.TRUE.equals(result);
+    }
+
     public void addWaitingRoom(String roomId) {
         redisTemplate.opsForSet().add(RedisKey.WAITING_ROOMS.getKey(), roomId);
     }
 
     public void removeWaitingRoom(String roomId) {
         redisTemplate.opsForSet().remove(RedisKey.WAITING_ROOMS.getKey(), roomId);
-    }
-
-    public String getRandomWaitingRoomId() {
-        return redisTemplate.opsForSet().randomMember(RedisKey.WAITING_ROOMS.getKey());
     }
 
     public List<Room> findAllWaitingRooms() {

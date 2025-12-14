@@ -8,12 +8,14 @@ import org.aspectj.lang.annotation.Pointcut;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 
+import java.util.Arrays;
+
 @Slf4j
 @Aspect
 @Component
 public class LogAspect {
 
-    @Pointcut("execution(* com.copyleft.GodsChoice.feature..*Service.*(..))")
+    @Pointcut("execution(* com.copyleft.GodsChoice..service.*Service.*(..))")
     public void serviceLayer() {}
 
     @Around("serviceLayer()")
@@ -23,22 +25,22 @@ public class LogAspect {
 
         String className = joinPoint.getTarget().getClass().getSimpleName();
         String methodName = joinPoint.getSignature().getName();
-        Object[] args = joinPoint.getArgs();
 
-        log.info("▶ [START] {}.{} | Args: {}", className, methodName, args);
+        log.info("▶ [START] {}.{}", className, methodName);
 
-        Object result;
+        Object result = null;
         try {
             result = joinPoint.proceed();
+            return result;
         } catch (Throwable e) {
-            log.error("🛑 [EXCEPTION] {}.{} | Msg: {}", className, methodName, e.getMessage());
+            log.error("🛑 [EXCEPTION] {}.{} | Msg: {}", className, methodName, e.getMessage(), e);
             throw e;
+        } finally {
+            if (stopWatch.isRunning()) {
+                stopWatch.stop();
+            }
+            log.info("◀ [END] {}.{} | Result: {} | Time: {}ms",
+                    className, methodName, result, stopWatch.getTotalTimeMillis());
         }
-
-        stopWatch.stop();
-        log.info("◀ [END] {}.{} | Result: {} | Time: {}ms",
-                className, methodName, result, stopWatch.getTotalTimeMillis());
-
-        return result;
     }
 }
