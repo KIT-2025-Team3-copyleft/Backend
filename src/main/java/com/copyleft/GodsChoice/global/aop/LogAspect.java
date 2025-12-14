@@ -25,9 +25,8 @@ public class LogAspect {
 
         String className = joinPoint.getTarget().getClass().getSimpleName();
         String methodName = joinPoint.getSignature().getName();
-        Object[] args = joinPoint.getArgs();
 
-        log.info("▶ [START] {}.{} | Args: {}", className, methodName, Arrays.deepToString(args));
+        log.info("▶ [START] {}.{}", className, methodName);
 
         Object result = null;
         try {

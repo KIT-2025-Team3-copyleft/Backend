@@ -16,7 +16,7 @@ public class WebSocketSessionManager {
     public void registerSession(WebSocketSession session) {
         WebSocketSession concurrentSession = new ConcurrentWebSocketSessionDecorator(
                 session, SEND_TIME_LIMIT, BUFFER_SIZE_LIMIT);
-        sessions.put(session.getId(), session);
+        sessions.put(session.getId(), concurrentSession);
     }
 
     public void removeSession(WebSocketSession session) {
